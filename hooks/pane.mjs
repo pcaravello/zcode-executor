@@ -57,8 +57,8 @@ export function drawPane(el, { sessions, repo, updatedAt, link = 'live', message
   const sections = sectionsOf(sessions, now);
 
   const icon = (kind, size) => {
-    if (kind === 'pulse') return Svg ? h(Svg, { source: pulseSvg(size), alt: '执行中', width: size, height: size }) : h(Text, { color: 'success' }, SPINNER[frame % SPINNER.length]);
-    return Svg ? h(Svg, { source: waitSvg(size), alt: '排队中', width: size, height: size }) : h(Text, { color: 'suggestion' }, '◷');
+    if (kind === 'pulse') return Svg ? h(Svg, { source: pulseSvg(size), alt: 'Running', width: size, height: size }) : h(Text, { color: 'success' }, SPINNER[frame % SPINNER.length]);
+    return Svg ? h(Svg, { source: waitSvg(size), alt: 'Queued', width: size, height: size }) : h(Text, { color: 'suggestion' }, '◷');
   };
   const meta = (s) => T({ dimColor: true }, [s.id, showRepo ? repoName(s) : null, s.task].filter(Boolean).join(' · '));
   // 并排的一行：左边的记号与名字固定不缩（否则长命令会把 `✓ Bash` 挤成两行、错位），右边占剩下的宽度、超长截断。
@@ -85,12 +85,12 @@ export function drawPane(el, { sessions, repo, updatedAt, link = 'live', message
     const { fold, lines } = replyFold(s.replyMarkdown);
     const canToggle = Boolean(Button && onToggle);
     if (!fold || !canToggle) return h(Box, { flexDirection: 'column', marginTop: 1 }, markdownBox(s));
-    if (expanded[s.id]) return h(Box, { flexDirection: 'column', marginTop: 1 }, markdownBox(s), toggle(s, '收起'));
+    if (expanded[s.id]) return h(Box, { flexDirection: 'column', marginTop: 1 }, markdownBox(s), toggle(s, 'Collapse'));
     return h(Box, { flexDirection: 'column', marginTop: 1 },
       ...lines.map((line, i) => h(Box, { flexDirection: 'row' },
         h(Text, { color: 'success' }, '┃ '),
         fill(T({}, i === lines.length - 1 ? `${line} …` : line)))),
-      toggle(s, '展开回复'));
+      toggle(s, 'Expand reply'));
   };
   const replyBlock = (lines) => lines.length > 0 && h(Box, { flexDirection: 'column', marginTop: 1 },
     ...lines.map((line) => h(Box, { flexDirection: 'row' },
@@ -104,14 +104,14 @@ export function drawPane(el, { sessions, repo, updatedAt, link = 'live', message
     const lead = h(Text, { color: head.color, bold: true }, head.glyph);
     if (s.phase === 'stale') {
       return card('error', headRow(lead, head.label, head.color, s, cornerOf(s, now)), meta(s),
-        T({}, '回合没有正常收尾，需要 Claude 决定重新投递或取消。'));
+        T({}, 'The turn did not end cleanly; Claude needs to decide whether to resend or cancel.'));
     }
     const p = s.pendingDetail ?? {};
     const body = p.kind === 'question' ? (p.questionTexts ?? []).map((q, i) => `${i + 1}. ${q}`).join('\n') : p.summary;
     return card('warning', headRow(lead, head.label, head.color, s, cornerOf(s, now)), meta(s),
       body && h(Box, { marginTop: 1 }, h(Code, { source: codeText(body), language: p.kind === 'question' ? 'text' : p.toolName === 'Bash' ? 'bash' : 'text' })),
-      p.reason && T({ dimColor: true }, `原因：${p.reason}`),
-      T({ dimColor: true }, '由 Claude 在对话中处理'));
+      p.reason && T({ dimColor: true }, `Reason: ${p.reason}`),
+      T({ dimColor: true }, 'Handled by Claude in the conversation'));
   };
 
   const doingCard = (s) => {
@@ -141,7 +141,7 @@ export function drawPane(el, { sessions, repo, updatedAt, link = 'live', message
     const o = outcomeOf(s);
     return h(Box, { flexDirection: 'row', justifyContent: 'space-between' },
       h(Box, { flexDirection: 'row', flexShrink: 1, minWidth: 0 },
-        fixed(h(Text, { color: o.color }, `${o.glyph} ${o.label}`.padEnd(6, '　'))),
+        fixed(h(Text, { color: o.color }, `${o.glyph} ${o.label}`.padEnd(10, ' '))),
         fill(T({}, `  ${s.title || s.id}`)),
         fixed(T({ dimColor: true }, `  ${repoName(s)}`))),
       s.since && fixed(h(Text, { dimColor: true }, hhmm(s.since))));
@@ -149,26 +149,26 @@ export function drawPane(el, { sessions, repo, updatedAt, link = 'live', message
 
   const { counts } = sections;
   const liveMark = link === 'live'
-    ? h(Box, { flexDirection: 'row', alignItems: 'center', gap: 1 }, icon('pulse', 12), h(Text, { dimColor: true }, `实时 · ${updatedAt ?? '等待数据'}`))
-    : h(Text, { color: 'error' }, `● ${link === 'down' ? '已断开' : '未连接'}`);
+    ? h(Box, { flexDirection: 'row', alignItems: 'center', gap: 1 }, icon('pulse', 12), h(Text, { dimColor: true }, `Live · ${updatedAt ?? 'waiting for data'}`))
+    : h(Text, { color: 'error' }, `● ${link === 'down' ? 'Disconnected' : 'Not connected'}`);
 
   return h(Box, { flexDirection: 'column', paddingX: 1 },
     h(Box, { flexDirection: 'row', justifyContent: 'space-between' },
       h(Box, { flexDirection: 'row' },
-        h(Text, { color: 'warning', bold: true }, `待处理 ${counts.todo}`),
+        h(Text, { color: 'warning', bold: true }, `Pending ${counts.todo}`),
         h(Text, { dimColor: true }, '  ·  '),
-        h(Text, { color: 'success', bold: true }, `执行中 ${counts.doing}`),
+        h(Text, { color: 'success', bold: true }, `Running ${counts.doing}`),
         h(Text, { dimColor: true }, '  ·  '),
-        h(Text, { dimColor: true }, `已结束 ${counts.done}`)),
+        h(Text, { dimColor: true }, `Ended ${counts.done}`)),
       liveMark),
     link !== 'live' && message && T({ color: 'error' }, message),
     scopeNote(repo) && T({ dimColor: true }, scopeNote(repo)),
-    counts.todo > 0 && section('待处理', counts.todo),
+    counts.todo > 0 && section('Pending', counts.todo),
     ...sections.todo.map(todoCard),
-    section('执行中', counts.doing),
-    counts.doing === 0 && T({ dimColor: true }, '没有执行中的回合'),
+    section('Running', counts.doing),
+    counts.doing === 0 && T({ dimColor: true }, 'No running turns'),
     ...sections.doing.map(doingCard),
-    counts.done > 0 && section('已结束', `最近 ${sections.recent.length + sections.rows.length} 条`),
+    counts.done > 0 && section('Ended', `last ${sections.recent.length + sections.rows.length}`),
     ...sections.recent.map(recentCard),
     ...sections.rows.map(doneRow),
   );

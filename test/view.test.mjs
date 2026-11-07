@@ -42,7 +42,7 @@ test('只留同一所属仓库的会话，所属仓库为空的隐藏；不在 g
   const list = [snap({ id: 'a', repo: '/repo/app' }), snap({ id: 'b', repo: '/repo/other' }), snap({ id: 'c', repo: null })];
   assert.deepEqual(filterByRepo(list, '/repo/app').map((s) => s.id), ['a']);
   assert.deepEqual(filterByRepo(list, null).map((s) => s.id), ['a', 'b', 'c']);
-  assert.equal(scopeNote(null), '未在 git 仓库中，显示全部项目');
+  assert.equal(scopeNote(null), 'Not in a git repository; showing all projects');
   assert.equal(scopeNote('/repo/app'), null);
 });
 
@@ -75,29 +75,29 @@ test('刚结束的卡片过了 10 分钟缩成一行', () => {
 
 test('卡片标题文案：审批请求、提问、中断、执行中、闲时排队与就绪', () => {
   assert.deepEqual(headOf(snap({ phase: 'pending', pendingDetail: { kind: 'permission', toolName: 'Bash', summary: 'rm -rf x', reason: '越界' } })),
-    { kind: 'glyph', glyph: '⏸', label: '挂起：审批请求（Bash）', color: 'warning' });
-  assert.equal(headOf(snap({ phase: 'pending', pendingDetail: { kind: 'question', questionTexts: ['a', 'b'] } })).label, '挂起：提问 2 条');
-  assert.equal(headOf(snap({ phase: 'stale' })).label, '执行进程已中断');
-  assert.deepEqual(headOf(snap({ phase: 'running' })), { kind: 'pulse', label: '执行中', color: 'success' });
-  assert.equal(headOf(snap({ phase: 'running', offpeakQueue: { phase: 'queued', position: 3 } })).label, '闲时排队中，第 3 位');
-  assert.equal(headOf(snap({ phase: 'running', offpeakQueue: { phase: 'ready', position: null } })).label, '闲时已就绪，等待开始');
+    { kind: 'glyph', glyph: '⏸', label: 'Pending: permission request (Bash)', color: 'warning' });
+  assert.equal(headOf(snap({ phase: 'pending', pendingDetail: { kind: 'question', questionTexts: ['a', 'b'] } })).label, 'Pending: question (2)');
+  assert.equal(headOf(snap({ phase: 'stale' })).label, 'Runner interrupted');
+  assert.deepEqual(headOf(snap({ phase: 'running' })), { kind: 'pulse', label: 'Running', color: 'success' });
+  assert.equal(headOf(snap({ phase: 'running', offpeakQueue: { phase: 'queued', position: 3 } })).label, 'Waiting in the off-peak queue, position 3');
+  assert.equal(headOf(snap({ phase: 'running', offpeakQueue: { phase: 'ready', position: null } })).label, 'Off-peak send ready, waiting to start');
 });
 
 test('已结束的结果文案：各结果、空闲、没有结果记录的已退出', () => {
-  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'done' })).label, '已完成');
-  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'timeout' })).label, '已超时');
-  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'failed' })).label, '执行失败');
-  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'exited' })).label, '执行失败');
-  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'cancelled' })).label, '已取消');
-  assert.equal(outcomeOf(snap({ phase: 'idle', lastOutcome: null })).label, '空闲');
-  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: null })).label, '已退出');
+  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'done' })).label, 'done');
+  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'timeout' })).label, 'timed out');
+  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'failed' })).label, 'failed');
+  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'exited' })).label, 'failed');
+  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'cancelled' })).label, 'cancelled');
+  assert.equal(outcomeOf(snap({ phase: 'idle', lastOutcome: null })).label, 'idle');
+  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: null })).label, 'exited');
 });
 
 test('卡片右上角时长：执行中、挂起、排队、中断各自的说法，没有 since 不显示', () => {
-  assert.equal(cornerOf(snap({ phase: 'running', since: ago(12) }), NOW), '已运行 12 分钟');
-  assert.equal(cornerOf(snap({ phase: 'pending', since: ago(3) }), NOW), '已等待 3 分钟');
-  assert.equal(cornerOf(snap({ phase: 'running', since: ago(75), offpeakQueue: { phase: 'queued', position: 1 } }), NOW), '已排 1 小时 15 分');
-  assert.equal(cornerOf(snap({ phase: 'stale', since: ago(0) }), NOW), '不到 1 分钟');
+  assert.equal(cornerOf(snap({ phase: 'running', since: ago(12) }), NOW), 'Running 12 min');
+  assert.equal(cornerOf(snap({ phase: 'pending', since: ago(3) }), NOW), 'Waiting 3 min');
+  assert.equal(cornerOf(snap({ phase: 'running', since: ago(75), offpeakQueue: { phase: 'queued', position: 1 } }), NOW), 'Queued 1 h 15 min');
+  assert.equal(cornerOf(snap({ phase: 'stale', since: ago(0) }), NOW), 'under 1 min');
   assert.equal(cornerOf(snap({ phase: 'running', since: null }), NOW), null);
   assert.equal(elapsed('不是时间', NOW), null);
 });
@@ -106,9 +106,9 @@ test('状态栏：执行中不含闲时排队，只有一项时只写一项，�
   const running = snap({ phase: 'running' });
   const queued = snap({ phase: 'running', offpeakQueue: { phase: 'queued', position: 2 } });
   const pending = snap({ phase: 'pending' });
-  assert.equal(statusLine([running, running, pending]), 'zcode：2 个回合执行中，1 个挂起');
-  assert.equal(statusLine([pending]), 'zcode：1 个挂起');
-  assert.equal(statusLine([running, queued]), 'zcode：1 个回合执行中');
+  assert.equal(statusLine([running, running, pending]), 'zcode: 2 turns running, 1 pending');
+  assert.equal(statusLine([pending]), 'zcode: 1 pending');
+  assert.equal(statusLine([running, queued]), 'zcode: 1 turn running');
   assert.equal(statusLine([queued, snap({ phase: 'exited' })]), undefined);
 });
 
@@ -116,13 +116,13 @@ test('提示：基线里没有的不弹；进入挂起、进入中断、回合�
   const running = snap({ phase: 'running', title: 'W1' });
   assert.deepEqual(toastsFor(undefined, snap({ phase: 'pending' })), []);
   assert.deepEqual(toastsFor(running, { ...running, phase: 'pending', pendingDetail: { kind: 'permission', toolName: 'Bash' } }),
-    ['zcode W1 挂起：审批请求（Bash）']);
-  assert.deepEqual(toastsFor(running, { ...running, phase: 'stale' }), ['zcode W1 执行进程已中断']);
-  assert.deepEqual(toastsFor(running, { ...running, phase: 'idle', lastOutcome: 'done', lastEndedAt: ago(0) }), ['zcode W1 回合结束：已完成']);
+    ['zcode W1 Pending: permission request (Bash)']);
+  assert.deepEqual(toastsFor(running, { ...running, phase: 'stale' }), ['zcode W1 Runner interrupted']);
+  assert.deepEqual(toastsFor(running, { ...running, phase: 'idle', lastOutcome: 'done', lastEndedAt: ago(0) }), ['zcode W1 turn ended: done']);
   // 队列里连投：阶段一直是 running，只有 lastEndedAt 变了，照样算一回合结束
-  assert.deepEqual(toastsFor({ ...running, lastEndedAt: ago(5) }, { ...running, lastOutcome: 'done', lastEndedAt: ago(0) }), ['zcode W1 回合结束：已完成']);
+  assert.deepEqual(toastsFor({ ...running, lastEndedAt: ago(5) }, { ...running, lastOutcome: 'done', lastEndedAt: ago(0) }), ['zcode W1 turn ended: done']);
   // 登记簿的 lastOutcome 还没跟上（runner 先写 last.json）：提示按 lastEndOutcome
-  assert.deepEqual(toastsFor(running, { ...running, phase: 'idle', lastOutcome: null, lastEndOutcome: 'failed', lastEndedAt: ago(0) }), ['zcode W1 回合结束：执行失败']);
+  assert.deepEqual(toastsFor(running, { ...running, phase: 'idle', lastOutcome: null, lastEndOutcome: 'failed', lastEndedAt: ago(0) }), ['zcode W1 turn ended: failed']);
   // 挂起期间快照再变（比如工具列表）不重复弹
   const pending = { ...running, phase: 'pending', pendingDetail: { kind: 'question', questionTexts: ['a'] } };
   assert.deepEqual(toastsFor(pending, { ...pending, recentTools: [{ toolName: 'Read', summary: 'a', ok: true }] }), []);
@@ -181,16 +181,16 @@ test('布局：样稿数据在桌面与终端两种元素表下都能画出，�
   for (const el of [desktop, terminal]) {
     const tree = drawPane(el, { sessions, repo: '/repo/app', updatedAt: '17:32:44', now: NOW, frame: 3 });
     const all = texts(tree).join('\n');
-    for (const want of ['待处理 3', '执行中 2', '已结束 2', '挂起：审批请求（Bash）', 'rm -rf ../dist', '原因：任务单没有授权',
-      '挂起：提问 1 条', '1. 保留兼容吗？', '执行进程已中断', '画板读取投影的部分已经改完。', '▸ Edit  ', 'src/board/CardFlow.tsx',
-      '✕ Bash  ', '闲时排队中，第 3 位', '已排 40 分钟', '已运行 12 分钟', '已完成，测试全绿。', '已取消', '实时 · 17:32:44']) {
+    for (const want of ['Pending 3', 'Running 2', 'Ended 2', 'Pending: permission request (Bash)', 'rm -rf ../dist', 'Reason: 任务单没有授权',
+      'Pending: question (1)', '1. 保留兼容吗？', 'Runner interrupted', '画板读取投影的部分已经改完。', '▸ Edit  ', 'src/board/CardFlow.tsx',
+      '✕ Bash  ', 'Waiting in the off-peak queue, position 3', 'Queued 40 min', 'Running 12 min', '已完成，测试全绿。', 'cancelled', 'Live · 17:32:44']) {
       assert.ok(all.includes(want), `缺「${want}」`);
     }
     assert.equal(types(tree).includes('Svg'), el === desktop); // 终端没有 Svg，不能出现
     if (el === terminal) assert.ok(all.includes(SPINNER[3]));
   }
-  const down = texts(drawPane(desktop, { sessions: [], repo: null, updatedAt: null, link: 'down', message: '实时连接中断，5 秒后重连', now: NOW })).join('\n');
-  for (const want of ['已断开', '实时连接中断，5 秒后重连', '未在 git 仓库中，显示全部项目', '没有执行中的回合']) assert.ok(down.includes(want), `缺「${want}」`);
+  const down = texts(drawPane(desktop, { sessions: [], repo: null, updatedAt: null, link: 'down', message: 'Live connection lost, reconnecting in 5 s', now: NOW })).join('\n');
+  for (const want of ['Disconnected', 'Live connection lost, reconnecting in 5 s', 'Not in a git repository; showing all projects', 'No running turns']) assert.ok(down.includes(want), `缺「${want}」`);
   delete globalThis.h;
 });
 
@@ -214,11 +214,11 @@ test('逐行处理：hello 开新基线，synced 前的快照不弹提示，sync
   const synced = step({ type: 'synced' });
   assert.deepEqual(Object.keys(panel.sessions).sort(), ['a', 'b']); // 旧的 old 被新基线整体换掉
   assert.equal(panel.link, 'live');
-  assert.equal(synced.status, 'zcode：1 个挂起'); // b 不是本项目的，不算进状态栏
+  assert.equal(synced.status, 'zcode: 1 pending'); // b 不是本项目的，不算进状态栏
   const other = step({ type: 'session', session: snap({ id: 'b', phase: 'pending', repo: '/repo/other', pendingDetail: { kind: 'question', questionTexts: ['y'] } }) });
   assert.deepEqual(other.toasts, []); // 别的项目不弹
   const mine = step({ type: 'session', session: snap({ id: 'a', phase: 'idle', lastOutcome: 'done', lastEndedAt: ago(0), title: 'W1' }) });
-  assert.deepEqual(mine.toasts, ['zcode W1 回合结束：已完成']);
+  assert.deepEqual(mine.toasts, ['zcode W1 turn ended: done']);
   assert.equal(mine.status, undefined); // 都没了，清掉状态栏
   const removed = step({ type: 'removed', id: 'a' });
   assert.deepEqual(Object.keys(panel.sessions), ['b']);
@@ -227,9 +227,9 @@ test('逐行处理：hello 开新基线，synced 前的快照不弹提示，sync
 });
 
 test('watch 起不来的说明：看得出找不到 node 才提 nodePath', () => {
-  assert.equal(startFailure('env: node: No such file or directory'), '启动 watch 失败：env: node: No such file or directory。可在插件配置里填写 node 路径（nodePath）');
-  assert.equal(startFailure('zcode-executor: 不认识的命令 watch'), '启动 watch 失败：zcode-executor: 不认识的命令 watch');
-  assert.equal(startFailure(''), '启动 watch 失败：watch 没有输出就退出了');
+  assert.equal(startFailure('env: node: No such file or directory'), 'Failed to start watch: env: node: No such file or directory. You can set the node path (nodePath) in the plugin settings');
+  assert.equal(startFailure('zcode-executor: 不认识的命令 watch'), 'Failed to start watch: zcode-executor: 不认识的命令 watch');
+  assert.equal(startFailure(''), 'Failed to start watch: watch exited without any output');
 });
 
 test('布局：快照带 replyMarkdown 时回复按 Markdown 画，没有时退回逐行；终端与桌面一样', async () => {
@@ -287,12 +287,12 @@ test('回复超过两行默认收起成前两行加「展开回复」，按下�
   const all = JSON.stringify(closed);
   assert.ok(all.includes('"完成"') && all.includes('"第一条 …"') && !all.includes('第二条')); // 前两行，多出来的成省略号
   const [open] = find(closed, 'Button');
-  assert.equal(open.props.label, '展开回复');
+  assert.equal(open.props.label, 'Expand reply');
   open.props.onPress();
   assert.deepEqual(toggled, ['r']);
   const opened = draw([long], { r: true });
   assert.equal(find(opened, 'Markdown')[0].props.text, '## 完成\n\n- 第一条\n- 第二条');
-  assert.equal(find(opened, 'Button')[0].props.label, '收起');
+  assert.equal(find(opened, 'Button')[0].props.label, 'Collapse');
   const plain = draw([short]);
   assert.equal(find(plain, 'Button').length, 0); // 不超两行不折叠、不出按钮
   assert.equal(find(plain, 'Markdown')[0].props.text, '**好了**，全部通过。');

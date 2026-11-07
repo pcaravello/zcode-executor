@@ -6,11 +6,11 @@ const RECENT_MS = 10 * 60 * 1000; // 结束 10 分钟内的会话在「已结束
 const DONE_LIMIT = 5;
 
 const OUTCOMES = {
-  done: { glyph: '✓', label: '已完成', color: 'success' },
-  timeout: { glyph: '◷', label: '已超时', color: 'warning' },
-  failed: { glyph: '✕', label: '执行失败', color: 'error' },
-  exited: { glyph: '✕', label: '执行失败', color: 'error' },
-  cancelled: { glyph: '–', label: '已取消', color: 'inactive' },
+  done: { glyph: '✓', label: 'done', color: 'success' },
+  timeout: { glyph: '◷', label: 'timed out', color: 'warning' },
+  failed: { glyph: '✕', label: 'failed', color: 'error' },
+  exited: { glyph: '✕', label: 'failed', color: 'error' },
+  cancelled: { glyph: '–', label: 'cancelled', color: 'inactive' },
 };
 
 const timeOf = (iso) => (iso ? Date.parse(iso) : NaN);
@@ -25,27 +25,27 @@ export function filterByRepo(sessions, repo) {
 export function outcomeOf(session) {
   const known = OUTCOMES[session.lastOutcome];
   if (known) return known;
-  if (session.phase === 'idle') return { glyph: '○', label: '空闲', color: 'inactive' };
-  if (session.lastOutcome === null || session.lastOutcome === undefined) return { glyph: '–', label: '已退出', color: 'inactive' };
+  if (session.phase === 'idle') return { glyph: '○', label: 'idle', color: 'inactive' };
+  if (session.lastOutcome === null || session.lastOutcome === undefined) return { glyph: '–', label: 'exited', color: 'inactive' };
   return { glyph: '?', label: String(session.lastOutcome), color: 'inactive' };
 }
 
 /** 卡片标题的状态文案与配色；kind 告诉布局用哪种图标（pulse 脉冲、wait 转圈、其余用 glyph）。 */
 export function headOf(session) {
-  if (session.phase === 'stale') return { kind: 'glyph', glyph: '⚠', label: '执行进程已中断', color: 'error' };
+  if (session.phase === 'stale') return { kind: 'glyph', glyph: '⚠', label: 'Runner interrupted', color: 'error' };
   if (session.phase === 'pending') {
     const p = session.pendingDetail;
     const label = p?.kind === 'question'
-      ? `挂起：提问 ${p.questionTexts?.length ?? 0} 条`
-      : `挂起：审批请求（${p?.toolName ?? '未知工具'}）`;
+      ? `Pending: question (${p.questionTexts?.length ?? 0})`
+      : `Pending: permission request (${p?.toolName ?? 'unknown tool'})`;
     return { kind: 'glyph', glyph: '⏸', label, color: 'warning' };
   }
   const q = session.offpeakQueue;
   if (session.phase === 'running' && q?.phase === 'queued') {
-    return { kind: 'wait', label: q.position === null || q.position === undefined ? '闲时排队中' : `闲时排队中，第 ${q.position} 位`, color: 'suggestion' };
+    return { kind: 'wait', label: q.position === null || q.position === undefined ? 'Waiting in the off-peak queue' : `Waiting in the off-peak queue, position ${q.position}`, color: 'suggestion' };
   }
-  if (session.phase === 'running' && q?.phase === 'ready') return { kind: 'wait', label: '闲时已就绪，等待开始', color: 'suggestion' };
-  return { kind: 'pulse', label: '执行中', color: 'success' };
+  if (session.phase === 'running' && q?.phase === 'ready') return { kind: 'wait', label: 'Off-peak send ready, waiting to start', color: 'suggestion' };
+  return { kind: 'pulse', label: 'Running', color: 'success' };
 }
 
 /** 「N 分钟」「N 小时 M 分」；since 为空或解析不了给 null（卡片右上角就不显示）。 */
@@ -53,9 +53,9 @@ export function elapsed(since, now) {
   const t = timeOf(since);
   if (Number.isNaN(t)) return null;
   const m = Math.max(0, Math.floor((now - t) / 60000));
-  if (m < 1) return '不到 1 分钟';
-  if (m < 60) return `${m} 分钟`;
-  return `${Math.floor(m / 60)} 小时 ${m % 60} 分`;
+  if (m < 1) return 'under 1 min';
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
 /** 卡片右上角：执行中「已运行」、挂起「已等待」、排队「已排」、中断只写时长。 */
@@ -63,9 +63,9 @@ export function cornerOf(session, now) {
   const span = elapsed(session.since, now);
   if (span === null) return null;
   if (session.phase === 'stale') return span;
-  if (session.phase === 'pending') return `已等待 ${span}`;
-  if (headOf(session).kind === 'wait') return `已排 ${span}`;
-  return `已运行 ${span}`;
+  if (session.phase === 'pending') return `Waiting ${span}`;
+  if (headOf(session).kind === 'wait') return `Queued ${span}`;
+  return `Running ${span}`;
 }
 
 /**
@@ -104,9 +104,9 @@ export function statusLine(sessions) {
   const running = sessions.filter((s) => s.phase === 'running' && headOf(s).kind === 'pulse').length;
   const pending = sessions.filter((s) => s.phase === 'pending').length;
   const parts = [];
-  if (running > 0) parts.push(`${running} 个回合执行中`);
-  if (pending > 0) parts.push(`${pending} 个挂起`);
-  return parts.length === 0 ? undefined : `zcode：${parts.join('，')}`;
+  if (running > 0) parts.push(`${running} ${running === 1 ? 'turn' : 'turns'} running`);
+  if (pending > 0) parts.push(`${pending} pending`);
+  return parts.length === 0 ? undefined : `zcode: ${parts.join(', ')}`;
 }
 
 /**
@@ -118,17 +118,17 @@ export function toastsFor(prev, next) {
   const name = next.title || next.id;
   const out = [];
   if (next.phase === 'pending' && prev.phase !== 'pending') out.push(`zcode ${name} ${headOf(next).label}`);
-  if (next.phase === 'stale' && prev.phase !== 'stale') out.push(`zcode ${name} 执行进程已中断`);
+  if (next.phase === 'stale' && prev.phase !== 'stale') out.push(`zcode ${name} Runner interrupted`);
   if (next.lastEndedAt && next.lastEndedAt !== prev.lastEndedAt) {
     // 结果取 last.json 的 lastEndOutcome：runner 先写 last.json 后改登记簿，取样落在两次写之间时 lastOutcome 还是旧的
-    out.push(`zcode ${name} 回合结束：${outcomeOf({ ...next, lastOutcome: next.lastEndOutcome ?? next.lastOutcome }).label}`);
+    out.push(`zcode ${name} turn ended: ${outcomeOf({ ...next, lastOutcome: next.lastEndOutcome ?? next.lastOutcome }).label}`);
   }
   return out;
 }
 
 /** 面板顶部的范围说明：不在 git 仓库里时注明显示的是全部项目。 */
 export function scopeNote(repo) {
-  return repo === null || repo === undefined ? '未在 git 仓库中，显示全部项目' : null;
+  return repo === null || repo === undefined ? 'Not in a git repository; showing all projects' : null;
 }
 
 /** 仓库根目录的最后一段，用在一行一条的已结束列表里。 */
@@ -177,9 +177,9 @@ export function applyLine(panel, baseline, msg, clockText) {
 
 /** watch 起不来时面板上的说明：只有看得出是找不到 node 时才提 nodePath 配置项。 */
 export function startFailure(reason) {
-  const text = String(reason ?? '').trim() || 'watch 没有输出就退出了';
+  const text = String(reason ?? '').trim() || 'watch exited without any output';
   const noNode = /env: .?node|ENOENT|No such file|not found/i.test(text);
-  return `启动 watch 失败：${text}${noNode ? '。可在插件配置里填写 node 路径（nodePath）' : ''}`;
+  return `Failed to start watch: ${text}${noNode ? '. You can set the node path (nodePath) in the plugin settings' : ''}`;
 }
 
 /**
