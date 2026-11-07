@@ -146,7 +146,7 @@ test('follow：剧本 hang + --timeout 1 → 3，且 mock 记录里没有 sessio
   const follow = runBin(env.env, ['follow', env.entry.id, '--timeout', '1']);
   assert.equal(follow.status, 3, `stderr: ${follow.stderr}`);
   assert.ok(Date.now() - started >= 900); // 真的等了 1 秒
-  assert.match(follow.stdout, /没有取消任何东西/);
+  assert.match(follow.stdout, /Nothing was cancelled/);
   assert.equal(readRecord(env.recordPath).some((m) => m.method === 'session/stop'), false);
   trackRunnerPids(env.runsDir);
 });
@@ -268,8 +268,8 @@ test('status：--tools 取最近工具调用，上下文占用来自 turn.comple
   assert.equal(typeof out.totalTokens, 'number');
   const human = runBin(env.env, ['status', env.entry.id]);
   // 人读的最近工具按调用列出（SPEC-watch-pane B）；这两行没有 toolCallId 也没有参数，只写工具名
-  assert.match(human.stdout, /最近工具: Write、Bash/); // 不传 --tools 默认 5 次
-  assert.match(human.stdout, /上下文: \d+ tokens/);
+  assert.match(human.stdout, /recent tools: Write, Bash/); // 不传 --tools 默认 5 次
+  assert.match(human.stdout, /context: \d+ tokens/);
 });
 
 // ---------- cancel ----------
@@ -285,7 +285,7 @@ test('cancel：回合进行中 cancel → mock 收到 session/stop，last 结算
   await waitFor(async () => (readEvents(env.runsDir).some((e) => e.type === 'executor.send') ? true : undefined));
   const cancel = runBin(env.env, ['cancel', env.entry.id]);
   assert.equal(cancel.status, 0, cancel.stderr);
-  assert.match(cancel.stdout, /已通知 runner/);
+  assert.match(cancel.stdout, /notified to stop/);
   // runner 的回合内轮询 500ms 一次，见到 cancel 文件才发 session/stop：轮询等它出现
   await waitFor(async () => {
     const stop = readRecord(env.recordPath).some((m) => m.method === 'session/stop');
@@ -383,7 +383,7 @@ test('list：两条会话都列出，--project 过滤，phase 用同一套判定
   const human = runBin(env.env, ['list']);
   assert.match(human.stdout, /\[idle\] 第一单/);
   // 人读行带等级与模型（T2.7 第 1 条）
-  assert.match(human.stdout, /第一单 — \S+ strong builtin:bigmodel-coding-plan\/GLM-5\.3 zcode 会话未建/);
+  assert.match(human.stdout, /第一单 — \S+ strong builtin:bigmodel-coding-plan\/GLM-5\.3 zcode session not created/);
 });
 
 // ---------- steer 与 stream ----------
@@ -523,7 +523,7 @@ test('cancel：runner 死了但 pending 还在 → 清理 pending 与 answer（�
   assert.equal(existsSync(path.join(env.runsDir, 'pending.json')), true); // 死前挂起还在
   const cancel = runBin(env.env, ['cancel', env.entry.id]);
   assert.equal(cancel.status, 0, cancel.stderr);
-  assert.match(cancel.stdout, /runner 已不在/);
+  assert.match(cancel.stdout, /runner is already gone/);
   assert.equal(existsSync(path.join(env.runsDir, 'pending.json')), false); // 清理掉了
   assert.equal(existsSync(path.join(env.runsDir, 'answer.json')), false);
 });
@@ -751,9 +751,9 @@ test('结束摘要：闸门计数与文件/Bash 统计进人读输出（T2.8 第
   const follow = runBin(env.env, ['follow', env.entry.id]);
   assert.equal(follow.status, 0, `stderr: ${follow.stderr}`);
   // allow = 快筛 1 + 慢判 1；ask = 真实 review-disabled 1 + 红线 1 + 慢判 1
-  assert.match(follow.stdout, /闸门：放行 2 次（红线挂起 1、快筛 1、慢判 2、转人工 3）/);
+  assert.match(follow.stdout, /Gate: allowed 2 time\(s\) \(hard rule 1, fast screen 1, slow review 2, handed to human 3\)/);
   // a.ts 由 Write/Edit 共用去重、b.ts 来自 inputOmitted 的兜底；Bash t4 两次是同一次调用
-  assert.match(follow.stdout, /改动：a\.ts、b\.ts；Bash 2 条/);
+  assert.match(follow.stdout, /Changes: a\.ts, b\.ts; 2 Bash call\(s\)/);
 });
 
 test('结束摘要 --json：文件去重且最多 10 个（T2.8 第 1 条）', async (t) => {
@@ -829,7 +829,7 @@ test('status 最近工具：batch/result 跳过、toolCallId 反查、路径显�
   ]);
   const human = runBin(env.env, ['status', env.entry.id]);
   // 人读的最近工具按调用去重（SPEC-watch-pane B）：Write 三行是同一次调用，摘要给相对路径
-  assert.match(human.stdout, /最近工具: Write\(docs\/deep\/x\.md\)、Bash\(ls\)/);
+  assert.match(human.stdout, /recent tools: Write\(docs\/deep\/x\.md\), Bash\(ls\)/);
 });
 
 test('status 最近工具：3.12+ 形状参数在 model.streaming 的 tool_call 里，file 与 summary 有值', async (t) => {
@@ -868,7 +868,7 @@ test('status 最近工具：3.12+ 形状参数在 model.streaming 的 tool_call 
     { toolName: 'Write', kind: 'result', file: 'x.md', summary: 'docs/deep/x.md' },
   ]);
   const human = runBin(env.env, ['status', env.entry.id]);
-  assert.match(human.stdout, /最近工具: Write\(docs\/deep\/x\.md\)/);
+  assert.match(human.stdout, /recent tools: Write\(docs\/deep\/x\.md\)/);
 });
 
 test('list：pending 行末尾带「挂起: 工具名」（T2.8 第 3 条）', async (t) => {
@@ -879,7 +879,7 @@ test('list：pending 行末尾带「挂起: 工具名」（T2.8 第 3 条）', a
   await waitFor(async () => (existsSync(path.join(env.runsDir, 'pending.json')) ? true : undefined));
   trackRunnerPids(env.runsDir);
   const human = runBin(env.env, ['list']);
-  assert.match(human.stdout, /\[pending\] .* 挂起: Write$/m);
+  assert.match(human.stdout, /\[pending\] .* pending: Write$/m);
   const listed = runBin(env.env, ['list', '--json']);
   assert.equal(JSON.parse(listed.stdout).sessions[0].phase, 'pending'); // --json 字段不动
   const pending = JSON.parse(await readFile(path.join(env.runsDir, 'pending.json'), 'utf8'));
@@ -897,8 +897,8 @@ test('挂起人读输出带规则原文（T2.9 第 6 条）', async (t) => {
   // file_path 指在执行副本（repo）之外：红线命中，pending.json 带 ruleId
   const run = runBin(env.env, ['send', env.entry.id, '越界的活', '--wait']);
   assert.equal(run.status, 5, run.stderr);
-  assert.match(run.stdout, /挂起·审批：Write/);
-  assert.match(run.stdout, /规则 outside-worktree：/); // 规则原文被带出来
+  assert.match(run.stdout, /pending permission: Write/);
+  assert.match(run.stdout, /rule outside-worktree:/); // 规则原文被带出来
   assert.match(run.stdout, /always escalated to a human/);
   trackRunnerPids(env.runsDir);
   const pending = JSON.parse(await readFile(path.join(env.runsDir, 'pending.json'), 'utf8'));

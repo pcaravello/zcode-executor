@@ -28,7 +28,7 @@ try {
   } else if (cmd === '--help' || cmd === '-h') {
     console.log(USAGE);
   } else if (!COMMANDS.includes(cmd)) {
-    console.error(`zcode-executor: 不认识的命令 ${cmd}。可用命令：${COMMANDS.join('、')}`);
+    console.error(`zcode-executor: unknown command ${cmd}. Available commands: ${COMMANDS.join(', ')}`);
     process.exitCode = 1;
   } else {
     const { run } = await import(`../lib/cli/${cmd}.mjs`);

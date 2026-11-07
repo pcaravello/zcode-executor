@@ -43,7 +43,7 @@ function errorOf(err) {
 async function expectGone(step, request, expectedCode) {
   try {
     const result = await request();
-    emit({ step, ok: false, note: '预期报错却成功了，协议可能又变了', result });
+    emit({ step, ok: false, note: 'expected a rejection but the request succeeded; the protocol may have changed again', result });
   } catch (err) {
     const code = err instanceof ExecutorError ? err.details?.code : undefined;
     emit({ step, ok: code === expectedCode, expectedCode, actualCode: code, message: err.message });
@@ -64,7 +64,7 @@ async function main() {
     try {
       execFileSync('git', ['init', '--quiet'], { cwd: dir, stdio: 'ignore' });
     } catch (err) {
-      console.error(`probe: git init 失败（${err.message}），继续用普通目录`);
+      console.error(`probe: git init failed (${err.message}); continuing with a plain directory`);
     }
     await runProbe(dir);
   } finally {
@@ -195,7 +195,7 @@ async function runWithClient(dir, provider, personalFile) {
       failStep('subscribe', err);
     }
   } else {
-    console.error('probe: 没拿到 sessionId，跳过 session/subscribe');
+    console.error('probe: no sessionId, skipping session/subscribe');
   }
 
   try {
@@ -216,7 +216,7 @@ async function runWithClient(dir, provider, personalFile) {
       failStep('resume', err);
     }
   } else {
-    console.error('probe: 没拿到 sessionId，跳过 session/resume');
+    console.error('probe: no sessionId, skipping session/resume');
   }
 
   if (sessionId !== undefined) {
@@ -227,7 +227,7 @@ async function runWithClient(dir, provider, personalFile) {
       failStep('close', err);
     }
   } else {
-    console.error('probe: 没拿到 sessionId，跳过 session/close');
+    console.error('probe: no sessionId, skipping session/close');
   }
 
   const exitInfo = await client.close();

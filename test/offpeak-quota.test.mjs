@@ -76,7 +76,7 @@ test('quota：能取号时报今天本工具的次数与「现在可以取号」
   const s = await setup({ events: { x_a: [{ type: 'executor.offpeak.taken', at: new Date().toISOString(), offPeakId: 'offpeak-1' }] } });
   const r = await runBin(s.env, ['quota']);
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(r.stdout, 'quota: 闲时取号今天本工具已用 1 次（每天约 3 次，App 里用的不计入）；服务器：现在可以取号\n');
+  assert.equal(r.stdout, 'quota: off-peak tickets taken by this tool today: 1 (about 3 per day; usage in the App is not counted); server: a ticket can be taken now\n');
   assert.deepEqual(s.server.requests.map((q) => `${q.method} ${q.path}`), ['GET /api/v1/off-peak/ticket/availability']);
   await assertZeroCostAndSecretFree(s, r);
 });
@@ -95,7 +95,7 @@ test('quota：额度用完时报服务器给的可再取时间（本地时间）
   const human = await runBin(s.env, ['quota']);
   const humanAfter = Date.now();
   assert.equal(human.status, 0, human.stderr);
-  const m = /^quota: 闲时取号今天本工具已用 0 次（每天约 3 次，App 里用的不计入）；服务器：今天额度已用完，(.+) 以后可再取\n$/.exec(human.stdout);
+  const m = /^quota: off-peak tickets taken by this tool today: 0 \(about 3 per day; usage in the App is not counted\); server: today's quota is used up; you can take a ticket again after (.+)\n$/.exec(human.stdout);
   assert.ok(m, human.stdout);
   // 人读行用中文本地时间（子进程与本进程同一时区）：mock 给的是请求时刻 + 60 秒，逐分钟列出候选
   const candidates = [];
@@ -172,7 +172,7 @@ test('quota：服务器说不能取但没给时间 → 「现在不能取号」'
   const s = await setup({ offpeak: { failRoute: { availability: { status: 200, body: { code: 0, msg: 'success', data: { can_take_number: false } } } } } });
   const r = await runBin(s.env, ['quota']);
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(r.stdout, 'quota: 闲时取号今天本工具已用 0 次（每天约 3 次，App 里用的不计入）；服务器：现在不能取号\n');
+  assert.equal(r.stdout, 'quota: off-peak tickets taken by this tool today: 0 (about 3 per day; usage in the App is not counted); server: cannot take a ticket now\n');
 });
 
 test('quota：闲时服务地址配错 → 报错退出码 1，不发请求', async () => {
@@ -213,7 +213,7 @@ test('quota：凭据里没有 JWT → 不适用，退出码 0，不联网', asyn
 
   const human = await runBin(s.env, ['quota']);
   assert.equal(human.status, 0);
-  assert.match(human.stdout, /^quota: 闲时取号今天本工具已用 0 次（每天约 3 次，App 里用的不计入）；服务器：不适用（.+）\n$/);
+  assert.match(human.stdout, /^quota: off-peak tickets taken by this tool today: 0 \(about 3 per day; usage in the App is not counted\); server: not applicable \(.+\)\n$/);
   await assertZeroCostAndSecretFree(s, human);
 });
 
@@ -228,7 +228,7 @@ test('quota：闲时服务 503 → 暂时不可用，退出码 0', async () => {
 
   const human = await runBin(s.env, ['quota']);
   assert.equal(human.status, 0);
-  assert.match(human.stdout, /；服务器：暂时不可用（.*503.*）\n$/);
+  assert.match(human.stdout, /; server: temporarily unavailable \(.*503.*\)\n$/);
   await assertZeroCostAndSecretFree(s, human);
 });
 
@@ -242,6 +242,6 @@ test('quota：资格接口 404 → 接口变了，退出码 1', async () => {
 
   const human = await runBin(s.env, ['quota']);
   assert.equal(human.status, 1);
-  assert.match(human.stdout, /；服务器：接口变了（.*404.*）\n$/);
+  assert.match(human.stdout, /; server: changed \(the app's internal interface changed\) \(.*404.*\)\n$/);
   await assertZeroCostAndSecretFree(s, human);
 });

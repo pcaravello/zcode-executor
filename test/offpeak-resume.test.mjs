@@ -123,7 +123,7 @@ test('send --offpeak --wait 排号中 runner 被杀：提示用 --offpeak --resu
   const r = await child;
   assert.equal(r.status, 4, r.stderr);
   assert.match(r.stdout, new RegExp(`pid ${runnerPid}.*send ${s.entry.id} --offpeak --resume.*cancel`));
-  assert.doesNotMatch(r.stdout, /再 send 一次会重起 runner/);
+  assert.doesNotMatch(r.stdout, /sending again will restart the runner/);
   await assertNoSecrets(s, [r.stdout, r.stderr]);
 });
 

@@ -209,7 +209,7 @@ test('answer：按 label 与自由文本；多问少给值 → 2 且列出可选
   trackRunnerPids(env.runsDir);
   const short = runBin(env.env, ['answer', env.entry.id, '快速']);
   assert.equal(short.status, 2, short.stderr);
-  assert.match(short.stderr, /共 2 个问题/);
+  assert.match(short.stderr, /got 1 value\(s\) for 2 question\(s\)/);
   assert.match(short.stderr, /快速|稳妥/); // 列出可选项
   const good = runBin(env.env, ['answer', env.entry.id, '快速', 'a', '--json']);
   assert.equal(good.status, 0, good.stderr); // label 与 value 都能匹配
@@ -236,7 +236,7 @@ test('answer：对审批用 answer → 退 2；approve 对提问 → 退 2', asy
   trackRunnerPids(perm.runsDir);
   const answerOnPerm = runBin(perm.env, ['answer', perm.entry.id, '随便']);
   assert.equal(answerOnPerm.status, 2, answerOnPerm.stderr);
-  assert.match(answerOnPerm.stderr, /当前挂起是审批/);
+  assert.match(answerOnPerm.stderr, /pending item is a permission request/);
   const approveOnPerm = runBin(perm.env, ['approve', perm.entry.id, '--json']);
   assert.equal(approveOnPerm.status, 0, approveOnPerm.stderr); // 对照：approve 正常
 
@@ -246,7 +246,7 @@ test('answer：对审批用 answer → 退 2；approve 对提问 → 退 2', asy
   trackRunnerPids(question.runsDir);
   const approveOnQuestion = runBin(question.env, ['approve', question.entry.id]);
   assert.equal(approveOnQuestion.status, 2, approveOnQuestion.stderr);
-  assert.match(approveOnQuestion.stderr, /当前挂起是提问/);
+  assert.match(approveOnQuestion.stderr, /pending item is a question/);
 });
 
 test('options 只有 allow_always 没有 allow_once → approve 退 2，deny 仍可（RULES §8）', async (t) => {
@@ -283,7 +283,7 @@ test('没有挂起 → approve/deny/answer 都退 2', async (t) => {
   for (const cmd of ['approve', 'deny', 'answer']) {
     const run = runBin(env.env, [cmd, env.entry.id, ...(cmd === 'answer' ? ['x'] : [])]);
     assert.equal(run.status, 2, `${cmd}: ${run.stderr}`);
-    assert.match(run.stderr, /当前没有挂起/);
+    assert.match(run.stderr, /nothing pending right now/);
   }
 });
 
@@ -306,7 +306,7 @@ test('runner 死了（SIGKILL）→ approve 退 2 且 answer.json 不写', async
   });
   const run = runBin(env.env, ['approve', env.entry.id, '--json']);
   assert.equal(run.status, 2, run.stderr);
-  assert.match(run.stderr, /runner 没了/);
+  assert.match(run.stderr, /runner is gone/);
   assert.equal(existsSync(path.join(env.runsDir, 'answer.json')), false); // 没人消费就不写
 });
 
@@ -436,7 +436,7 @@ test('两次 approve：第二次（无挂起）退 2（评审 T2.5b 第 6 条）
   await waitFor(async () => (existsSync(path.join(env.runsDir, 'pending.json')) ? undefined : true));
   const second = runBin(env.env, ['approve', env.entry.id]);
   assert.equal(second.status, 2, second.stderr);
-  assert.match(second.stderr, /当前没有挂起/);
+  assert.match(second.stderr, /nothing pending right now/);
 });
 
 // ---------- T2.6 补充 ----------
@@ -536,15 +536,15 @@ test('pending.json 坏 JSON：status/follow/send --wait/cancel 都退 1 且报�
   await writeFile(path.join(env.runsDir, 'pending.json'), '{oops');
   const status = runBin(env.env, ['status', env.entry.id, '--json']);
   assert.equal(status.status, 1, status.stderr);
-  assert.match(status.stderr, /pending\.json 解析失败/);
+  assert.match(status.stderr, /pending\.json failed to parse/);
   const follow = runBin(env.env, ['follow', env.entry.id]);
   assert.equal(follow.status, 1, follow.stderr);
-  assert.match(follow.stderr, /pending\.json 解析失败/);
+  assert.match(follow.stderr, /pending\.json failed to parse/);
   const send = runBin(env.env, ['send', env.entry.id, '再投一条', '--wait']);
   assert.equal(send.status, 1, send.stderr);
-  assert.match(send.stderr, /pending\.json 解析失败/);
+  assert.match(send.stderr, /pending\.json failed to parse/);
   const cancel = runBin(env.env, ['cancel', env.entry.id]);
   assert.equal(cancel.status, 1, cancel.stderr);
-  assert.match(cancel.stderr, /pending\.json 解析失败/);
+  assert.match(cancel.stderr, /pending\.json failed to parse/);
   process.kill(pid, 'SIGKILL');
 });

@@ -78,8 +78,8 @@ test('runner 已死时 cancel（回合 exited 后）：CLI 直接结算号，写
   assert.deepEqual(settledTickets(s), []);
   const cancel = await runBin(s.env, ['cancel', s.entry.id]);
   assert.equal(cancel.status, 0, cancel.stderr);
-  assert.match(cancel.stdout, /runner 已不在/);
-  assert.match(cancel.stdout, /号 mock-ticket-1 已结算/);
+  assert.match(cancel.stdout, /runner is already gone/);
+  assert.match(cancel.stdout, /ticket mock-ticket-1 settled/);
   assert.equal(existsSync(path.join(s.runsDir, 'lock')), false, 'cancel 不该起 runner');
   assert.deepEqual(settledTickets(s), ['mock-ticket-1']);
   const last = lastJson(s);
@@ -104,7 +104,7 @@ test('runner 已死时 cancel、结算失败：只请求一次，号记进 unset
   const cancel = await runBin(s.env, ['cancel', s.entry.id]);
   assert.equal(cancel.status, 0, cancel.stderr);
   assert.equal([...cancel.stderr.matchAll(/^cancel: failed to settle off-peak ticket mock-ticket-1/gm)].length, 1, cancel.stderr);
-  assert.match(cancel.stdout, /结算失败/);
+  assert.match(cancel.stdout, /settle failed/);
   assert.equal(settleRequests(s).length, 1, '不退避重试');
   const op = offpeakJson(s);
   assert.equal(op.phase, 'done');

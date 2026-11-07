@@ -34,10 +34,10 @@ function deriveKey(env = process.env) {
 function decrypt(value, key) {
   if (!value.startsWith(PREFIX)) return value;
   const parts = value.slice(PREFIX.length).split('.');
-  if (parts.length !== 3) throw new Error('密文格式不对（不是三段）');
+  if (parts.length !== 3) throw new Error('ciphertext has the wrong format (not three parts)');
   const [iv, tag, ct] = parts.map((p) => Buffer.from(p, 'base64url'));
-  if (iv.length !== 12) throw new Error(`iv 长度不对：${iv.length}`);
-  if (tag.length !== 16) throw new Error(`authTag 长度不对：${tag.length}`);
+  if (iv.length !== 12) throw new Error(`wrong iv length: ${iv.length}`);
+  if (tag.length !== 16) throw new Error(`wrong authTag length: ${tag.length}`);
   const d = createDecipheriv('aes-256-gcm', key, iv);
   d.setAuthTag(tag);
   return Buffer.concat([d.update(ct), d.final()]).toString('utf8');
@@ -52,50 +52,50 @@ let data;
 try {
   data = JSON.parse(readFileSync(out.path, 'utf8'));
 } catch (err) {
-  out.error = `读不到凭据文件：${err.message}`;
+  out.error = `cannot read the credentials file: ${err.message}`;
   say(`probe-credentials: ${out.error}`);
   if (json) console.log(JSON.stringify(out));
   process.exit(1);
 }
 const { key, source } = deriveKey();
 out.keySource = source;
-say(`凭据文件：${out.path}`);
-say(`密钥来源：${source}`);
-say(`键名（${Object.keys(data).length} 个，只列名字）：`);
+say(`credentials file: ${out.path}`);
+say(`key source: ${source}`);
+say(`key names (${Object.keys(data).length} keys, names only):`);
 for (const k of Object.keys(data)) {
   const enc = String(data[k]).startsWith(PREFIX);
   out.keys.push({ key: k, encrypted: enc });
-  say(`  ${k}  ${enc ? '[enc:v1]' : '[明文]'}`);
+  say(`  ${k}  ${enc ? '[enc:v1]' : '[plaintext]'}`);
 }
 
 // 只解这四类键；打印「成功/失败 + 明文长度」，永不打印明文
 const check = (label, k, describe) => {
   if (!(k in data)) {
     out.checks.push({ label, key: k, present: false });
-    say(`${label}：缺键 ${k}`);
+    say(`${label}: missing key ${k}`);
     return null;
   }
   try {
     const plain = decrypt(String(data[k]), key);
     const extra = describe ? describe(plain) : {};
     out.checks.push({ label, key: k, present: true, ok: true, length: plain.length, ...extra });
-    say(`${label}：解密成功，长度 ${plain.length}${extra.note ? `，${extra.note}` : ''}`);
+    say(`${label}: decrypted ok, length ${plain.length}${extra.note ? `, ${extra.note}` : ''}`);
     return plain;
   } catch (err) {
     out.checks.push({ label, key: k, present: true, ok: false, error: err.message });
-    say(`${label}：解密失败（${err.message}）`);
+    say(`${label}: decryption failed (${err.message})`);
     return null;
   }
 };
 
-const family = check('active_provider', 'oauth:active_provider', (v) => ({ note: `值=${v === 'zai' || v === 'bigmodel' ? v : '（不是 zai/bigmodel）'}`, value: v === 'zai' || v === 'bigmodel' ? v : null }));
+const family = check('active_provider', 'oauth:active_provider', (v) => ({ note: `value=${v === 'zai' || v === 'bigmodel' ? v : '(not zai/bigmodel)'}`, value: v === 'zai' || v === 'bigmodel' ? v : null }));
 if (family === 'zai' || family === 'bigmodel') {
   const info = check('user_info', `oauth:${family}:user_info`, (v) => {
     try {
       const o = JSON.parse(v);
-      return { note: `字段 ${Object.keys(o).join(',')}，id ${o.id !== undefined ? '在' : '缺'}`, hasId: o.id !== undefined };
+      return { note: `fields ${Object.keys(o).join(',')}, id ${o.id !== undefined ? 'present' : 'missing'}`, hasId: o.id !== undefined };
     } catch {
-      return { note: '不是 JSON', hasId: false };
+      return { note: 'not JSON', hasId: false };
     }
   });
   let id = null;
@@ -107,11 +107,11 @@ if (family === 'zai' || family === 'bigmodel') {
   if (id !== null && id !== undefined) {
     const enc = encodeURIComponent(String(id));
     for (const plan of ['individual', 'team']) {
-      check(`${plan}-coding-plan api-key`, `account-provider:coding-plan:account:${family}-${plan}-coding-plan:account:${enc}:api-key`, (v) => ({ note: `含点号 ${v.includes('.') ? '是' : '否'}` }));
+      check(`${plan}-coding-plan api-key`, `account-provider:coding-plan:account:${family}-${plan}-coding-plan:account:${enc}:api-key`, (v) => ({ note: `contains a dot ${v.includes('.') ? 'yes' : 'no'}` }));
     }
   }
 }
 out.ok = out.checks.filter((c) => c.present).every((c) => c.ok) && out.checks.some((c) => c.label.endsWith('api-key') && c.ok);
-say(out.ok ? '结论：本机密钥派生能解开，线 C 可以接。' : '结论：有键解不开或没有 coding-plan key，见上面各行。');
+say(out.ok ? 'conclusion: the local key derivation can decrypt these keys; line C can be wired up.' : 'conclusion: some keys failed to decrypt or there is no coding-plan key; see the lines above.');
 if (json) console.log(JSON.stringify(out));
 process.exitCode = out.ok ? 0 : 1;

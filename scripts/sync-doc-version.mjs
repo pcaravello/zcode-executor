@@ -15,13 +15,13 @@ const checkOnly = process.argv.includes('--check');
 
 const targets = [
   ...['README.md', 'README.zh-CN.md'].flatMap((file) => [
-    { file, label: '版本徽章', pattern: /badge\/version-v\d+\.\d+\.\d+[^"'\s]*-/, replace: `badge/version-v${version}-` },
-    { file, label: '徽章 alt', pattern: /alt="v\d+\.\d+\.\d+[^"]*"/, replace: `alt="v${version}"` },
+    { file, label: 'version badge', pattern: /badge\/version-v\d+\.\d+\.\d+[^"'\s]*-/, replace: `badge/version-v${version}-` },
+    { file, label: 'badge alt', pattern: /alt="v\d+\.\d+\.\d+[^"]*"/, replace: `alt="v${version}"` },
   ]),
   ...['.claude-plugin/plugin.json', '.codex-plugin/plugin.json', '.github/plugin/plugin.json', '.grok-plugin/plugin.json', '.antigravity-plugin/plugin.json', 'gemini-extension.json'].map((file) => ({
-    file, label: 'version 字段', pattern: /"version": "[^"]+"/, replace: `"version": "${version}"`,
+    file, label: 'version field', pattern: /"version": "[^"]+"/, replace: `"version": "${version}"`,
   })),
-  { file: 'plugin.yaml', label: 'version 字段', pattern: /^version: .+$/m, replace: `version: ${version}` },
+  { file: 'plugin.yaml', label: 'version field', pattern: /^version: .+$/m, replace: `version: ${version}` },
 ];
 
 const edits = new Map();
@@ -36,13 +36,13 @@ for (const t of targets) {
 }
 
 if (missing.length) {
-  console.error(`sync-doc-version: 找不到标记，文档挪了位置就要改这个脚本：\n  ${missing.join('\n  ')}`);
+  console.error(`sync-doc-version: marker not found; if the docs moved, this script must be updated:\n  ${missing.join('\n  ')}`);
   process.exit(1);
 }
 if (checkOnly) {
-  if (!drifted.length) { console.log(`sync-doc-version: 文档已是 ${version}`); process.exit(0); }
-  console.error(`sync-doc-version: 文档版本号落后于 package.json（${version}）：\n  ${drifted.join('\n  ')}`);
+  if (!drifted.length) { console.log(`sync-doc-version: docs already at ${version}`); process.exit(0); }
+  console.error(`sync-doc-version: doc versions lag behind package.json (${version}):\n  ${drifted.join('\n  ')}`);
   process.exit(1);
 }
 for (const [file, content] of edits) writeFileSync(join(root, file), content);
-console.log(drifted.length ? `sync-doc-version: 已同步到 ${version}\n  ${drifted.join('\n  ')}` : `sync-doc-version: 文档已是 ${version}`);
+console.log(drifted.length ? `sync-doc-version: synced to ${version}\n  ${drifted.join('\n  ')}` : `sync-doc-version: docs already at ${version}`);

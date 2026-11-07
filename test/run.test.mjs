@@ -366,7 +366,7 @@ test('send --wait：挂起回显里的终端控制字符换成看得见的转义
   const run = runBin(env.env, ['send', env.entry.id, '写文件', '--wait']);
   assert.equal(run.status, 5, `stdout: ${run.stdout} stderr: ${run.stderr}`);
   trackRunnerPids(env.runsDir);
-  assert.match(run.stdout, /挂起·审批/);
+  assert.match(run.stdout, /pending permission:/)
   assert.doesNotMatch(run.stdout + run.stderr, RAW_CONTROLS, '控制字符不该原样上屏');
   // 内容不丢：换成看得见的转义，人能看出这里被塞了东西
   assert.ok(run.stdout.includes('有副作用\\u001b[2K\\u000d\\u001b]0;pwned\\u0007send: done'), run.stdout);
@@ -403,7 +403,7 @@ test('send --wait：审批挂起 → 5 且 runner 活着；带 requestId 的 ans
   });
   const run = runBin(env.env, ['send', env.entry.id, '写文件', '--wait']);
   assert.equal(run.status, 5, `stdout: ${run.stdout} stderr: ${run.stderr}`);
-  assert.match(run.stdout, /挂起·审批/);
+  assert.match(run.stdout, /pending permission:/)
   assert.match(run.stdout, /Write/);
   const pending = JSON.parse(await readFile(path.join(env.runsDir, 'pending.json'), 'utf8'));
   assert.equal(pending.toolName, 'Write');
@@ -663,7 +663,7 @@ test('send --task：不是普通文件（目录）退出码 1，不入队', asyn
   const env = await setupSend(t);
   const run = runBin(env.env, ['send', env.entry.id, '干活', '--task', env.home]);
   assert.equal(run.status, 1, `stderr: ${run.stderr}`);
-  assert.match(run.stderr, /--task 不是文件/);
+  assert.match(run.stderr, /--task is not a file/);
   assert.equal(existsSync(path.join(env.runsDir, 'queue')), false);
 });
 
@@ -671,7 +671,7 @@ test('send --task：不存在退出码 1；存在则队列项、state.current、
   const env = await setupSend(t, { script: { turns: [{ hang: true }] } });
   const missing = runBin(env.env, ['send', env.entry.id, '干活', '--task', '/nonexistent/task.md']);
   assert.equal(missing.status, 1, `stderr: ${missing.stderr}`);
-  assert.match(missing.stderr, /--task 文件不存在/);
+  assert.match(missing.stderr, /--task file does not exist/);
 
   const taskAbs = path.join(env.home, '任务单.md');
   await writeFile(taskAbs, '# 任务');
