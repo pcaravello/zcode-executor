@@ -1,41 +1,41 @@
-# T-XXX 任务标题
+# T-XXX task title
 
-> 这份文件是 Claude（规划）交给 zcode（执行）的契约。zcode 按这里写的做，
-> Claude 按这里的验收标准检查。写不清楚的部分，zcode 会自己发挥——那是返工的根源。
+> This file is the contract from Claude (planning) to zcode (execution). zcode does what is written here,
+> and Claude checks the work against the acceptance criteria below. Anything left vague, zcode will improvise — that is the root cause of rework.
 >
-> 投递时必带这个文件的路径：
-> `zcode-executor send <id> "执行 tasks/T-XXX.md" --task "$WT/tasks/T-XXX.md" --wait`（`--task` 用绝对路径：它按 Claude 的当前目录解析，任务单在执行副本 `$WT` 里）
-> 模型审批把这份文件当授权依据：验收标准里没写的操作，不会自动放行。
+> The send must carry this file's path:
+> `zcode-executor send <id> "execute tasks/T-XXX.md" --task "$WT/tasks/T-XXX.md" --wait` (`--task` takes an absolute path: it is resolved against Claude's current directory, and the task file lives in the worktree `$WT`)
+> Model review treats this file as the authorization basis: actions not covered by the acceptance criteria are not approved automatically.
 
-## 要做什么
+## What to do
 
-一句话说清目标。不是「优化一下 X」，而是「把 X 从 A 状态改成 B 状态」。
+State the goal in one sentence. Not "improve X", but "change X from state A to state B".
 
-## 背景（Claude 已经查清的，别重新探索）
+## Background (already verified by Claude; do not re-explore)
 
-- 相关文件：`path/to/a.mjs:120`（这里负责……）、`path/to/b.mjs`（……）
-- 已知约束：……
-- 已经排除的方案：……（写清楚为什么不走那条路，省得它再试一遍）
+- Relevant files: `path/to/a.mjs:120` (this is where … lives), `path/to/b.mjs` (…)
+- Known constraints: …
+- Approaches already ruled out: … (say clearly why that path was rejected, so it is not tried again)
 
-## 改哪些文件
+## Files to change
 
-- [ ] `path/to/a.mjs` — 改什么
-- [ ] `path/to/a.test.mjs` — 补什么测试
+- [ ] `path/to/a.mjs` — what to change
+- [ ] `path/to/a.test.mjs` — which tests to add
 
-## 验收标准（必须能被机器检查）
+## Acceptance criteria (must be machine-checkable)
 
-- [ ] `<测试命令>` 全绿（例如 `npm test`）
-- [ ] 新增测试覆盖 ……（具体到用例名）
-- [ ] `<构建或检查命令>` 无报错（例如 `node --check`）
-- [ ] `git diff` 只动了上面列出的文件
+- [ ] `<test command>` passes fully (e.g. `npm test`)
+- [ ] New tests cover … (down to the case names)
+- [ ] `<build or check command>` reports no errors (e.g. `node --check`)
+- [ ] `git diff` touches only the files listed above
 
-## 禁区
+## Off-limits
 
-- 不要改 `……`（原因）
-- 不要引入新依赖
-- 不要跑 git 命令：不 commit、不 rebase、不 amend。改动留在工作区，提交由 Claude 验收后做
+- Do not change `…` (reason)
+- Do not add new dependencies
+- Do not run git commands: no commit, no rebase, no amend. Leave the changes in the working tree; Claude commits after acceptance
 
-## 做完之后
+## When done
 
-改动留在工作区不提交，简单说一句改了哪些文件、有没有偏离本文件。不用写长报告，
-Claude 会自己看 diff 和测试来验收。
+Leave the changes uncommitted in the working tree, and say briefly which files changed and whether anything deviated from this file. No long report needed —
+Claude verifies from the diff and the tests itself.

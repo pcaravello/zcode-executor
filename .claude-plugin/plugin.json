@@ -1,7 +1,7 @@
 {
   "name": "zcode-executor",
   "version": "0.6.1",
-  "description": "把想清楚的开发任务派给本机 ZCode（GLM）执行，隔离在 worktree 里跑，红线加模型审批把关，用 git diff 和测试验收",
+  "description": "Claude plans, ZCode codes, git verifies. Hand a development task to the local ZCode (GLM) agent in an isolated git worktree, with a hard-rule + model-review permission gate.",
   "author": {
     "name": "kyomio"
   },
@@ -20,8 +20,8 @@
   "userConfig": {
     "nodePath": {
       "type": "string",
-      "title": "node 路径",
-      "description": "观察面板起 watch 子进程用的 node 可执行文件绝对路径。留空时按 PATH 找 node（bin/zcode-executor 的 shebang）；面板提示找不到 node 时再填。",
+      "title": "Node path",
+      "description": "Absolute path of the node executable the watch pane uses to start its watch subprocess. Leave empty to find node on PATH (per the bin/zcode-executor shebang); set it when the pane says node cannot be found.",
       "default": ""
     }
   }
