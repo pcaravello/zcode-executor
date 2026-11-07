@@ -129,7 +129,7 @@ test('doctor --offpeak --json：四层都符合 → ok，退出码 0，形状 {o
   assert.match(sent.content, /\bok\b/);
   // 自检会话起一个好认的标题（v4 renameSession）
   const rename = record.find((m) => m.method === 'v4/command' && m.params.type === 'renameSession');
-  assert.equal(rename.params.payload.title, 'zcode-executor doctor 闲时自检');
+  assert.equal(rename.params.payload.title, 'zcode-executor doctor off-peak self-check');
   await assertCleanAndSecretFree(r);
 });
 
@@ -261,7 +261,7 @@ test('只有团队版 key → 不适用（团队版暂不支持）', async () =>
   assert.equal(r.status, 0, r.stderr);
   const out = JSON.parse(r.stdout);
   assert.equal(out.offpeak.state, 'not-applicable');
-  assert.match(out.offpeak.reason, /团队版/);
+  assert.match(out.offpeak.reason, /team Coding Plan/);
 });
 
 test('App 版本不是 3.14.1 → stderr 多一行提示，不影响结论；推不出版本报「未知」', async () => {
@@ -364,7 +364,7 @@ test('闲时服务地址不合法：不带参数的 doctor 报 ⑤ 暂时不可�
   const only = await runDoctor(['doctor', '--offpeak', '--json'], { envOverrides });
   assert.equal(only.status, 1);
   assert.equal(only.stdout, '');
-  assert.match(only.stderr, /^doctor: 闲时服务地址必须是 https/m);
+  assert.match(only.stderr, /^doctor: the off-peak server address must be https/m);
 });
 
 // ---------- 直接调 runOffPeakCheck：暂时性失败、重跑、形状不对（SPEC-offpeak F「补充分类」） ----------

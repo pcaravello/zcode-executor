@@ -76,7 +76,7 @@ test('loadConfig：顶层不认识的键收进 warnings，不抛错（评审 T2.
     const config = loadConfig(home);
     assert.equal(config.waitTimeoutSec, 30); // 认识的键照常生效
     assert.equal(config.tierss, undefined);
-    assert.deepEqual(config.warnings, [`配置里有不认识的键 tierss（已忽略），检查是否拼错：${path.join(home, 'config.json')}`]);
+    assert.deepEqual(config.warnings, [`config has an unrecognized key tierss (ignored); check for a typo: ${path.join(home, 'config.json')}`]);
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -227,7 +227,7 @@ test('loadConfig：含 Jev key 的 config 是符号链接时拒绝且不泄漏 k
   assert.throws(() => loadConfig(home), (err) => {
     assert.ok(err instanceof ExecutorError);
     assert.equal(err.exitCode, 1);
-    assert.match(err.message, /符号链接|普通文件/);
+    assert.match(err.message, /symlink|regular file/);
     assert.equal(err.message.includes(secret), false);
     return true;
   });

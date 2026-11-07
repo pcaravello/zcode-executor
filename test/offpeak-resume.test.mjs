@@ -41,7 +41,7 @@ test('exited 之后 send --offpeak --resume：只重新拉起 runner（不入队
   await writeFile(s.mock.env.MOCK_APPSERVER_SCRIPT, '{}'); // 子进程这次不再退出
   const resume = await runBin(s.env, ['send', s.entry.id, '--offpeak', '--resume']);
   assert.equal(resume.status, 0, resume.stderr);
-  assert.equal(resume.stdout, `send: 已重新拉起 runner，继续闲时投递 ${offPeakId}\n`);
+  assert.equal(resume.stdout, `send: runner restarted, resuming off-peak send ${offPeakId}\n`);
   await waitFor(() => lastJson(s).outcome === 'done', { timeoutMs: 30000 });
   trackPids(s.runsDir);
   await waitRunnerGone(s.runsDir);
@@ -66,7 +66,7 @@ test('send --offpeak --resume：runner 还活着 → 退出码 2，说明原因�
   await writeFile(path.join(s.runsDir, 'lock'), JSON.stringify({ pid: process.pid })); // 本测试进程当作活着的 runner
   const r = await runBin(s.env, ['send', s.entry.id, '--offpeak', '--resume']);
   assert.equal(r.status, 2, r.stderr);
-  assert.match(r.stderr, /^send: .*runner 还活着/m);
+  assert.match(r.stderr, /^send: .*runner is still alive/m);
   assert.equal((await queueFiles(s)).length, 1);
   assert.equal(takeRequests(s).length, 1);
   await assertNoSecrets(s, [r.stdout, r.stderr]);
@@ -79,7 +79,7 @@ test('send --offpeak --resume：队列头不是这次闲时投递的项 → 退�
   await lay(s, { offpeak: offPeakJson(offPeakId, ticket.ticket_id, { phase: 'running' }), queue: [{ text: '普通的活' }] });
   const r = await runBin(s.env, ['send', s.entry.id, '--offpeak', '--resume']);
   assert.equal(r.status, 2, r.stderr);
-  assert.match(r.stderr, /^send: .*队列头不是/m);
+  assert.match(r.stderr, /^send: .*queue head is not/m);
   assert.equal(existsSync(path.join(s.runsDir, 'lock')), false);
   await assertNoSecrets(s, [r.stdout, r.stderr]);
 });
@@ -122,7 +122,7 @@ test('send --offpeak --wait 排号中 runner 被杀：提示用 --offpeak --resu
   process.kill(runnerPid, 'SIGKILL');
   const r = await child;
   assert.equal(r.status, 4, r.stderr);
-  assert.match(r.stdout, new RegExp(`runner 没了（pid ${runnerPid}）.*send ${s.entry.id} --offpeak --resume.*cancel`));
+  assert.match(r.stdout, new RegExp(`pid ${runnerPid}.*send ${s.entry.id} --offpeak --resume.*cancel`));
   assert.doesNotMatch(r.stdout, /再 send 一次会重起 runner/);
   await assertNoSecrets(s, [r.stdout, r.stderr]);
 });
@@ -144,7 +144,7 @@ test('回合已结束、正在结算号时 --steer：runner 不把它当普通�
   const failed = readEvents(s.runsDir).filter((e) => e.type === 'executor.steer_failed');
   assert.equal(failed.length, 1);
   assert.equal(failed[0].text, '顺手补个测试');
-  assert.match(failed[0].reason, /闲时回合已结束/);
+  assert.match(failed[0].reason, /has already ended/);
   assert.equal(offpeakJson(s).phase, 'done');
   assert.deepEqual(await queueFiles(s), []);
   await assertNoSecrets(s, [r.stdout, r.stderr, steer.stdout, steer.stderr]);

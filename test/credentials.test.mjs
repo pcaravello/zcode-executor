@@ -166,7 +166,7 @@ test('credentials：解不开（密钥不对）返回 {error}，error 里没有�
     env: { ZCODE_CREDENTIAL_SECRET: 'wrong-secret-entirely' },
   });
   assert.ok(out?.error, '应返回 error');
-  assert.match(out.error, /解不开|解密/);
+  assert.match(out.error, /decryption failed/);
 });
 
 test('credentials：缺 oauth:active_provider 返回 {error}', async () => {
@@ -235,7 +235,7 @@ test('credentials：active_provider 解出别的值 → error 不带解出来的
   const file = await writeCredentials({ 'oauth:active_provider': odd });
   const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.ok(out?.error);
-  assert.match(out.error, /不是 zai 或 bigmodel/);
+  assert.match(out.error, /is not zai or bigmodel/);
   assert.equal(out.error.includes(odd), false); // 解出来的值一律不进面向人的文案
 });
 
@@ -292,7 +292,7 @@ test('闲时凭据：凭据文件不存在 → not-applicable，说没用账号�
   const file = path.join(os.tmpdir(), `zcode-cred-none-${Date.now()}.json`);
   const out = readOffPeakAuth({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.equal(out.kind, 'not-applicable');
-  assert.match(out.error, /登录/);
+  assert.match(out.error, /no account login/);
 });
 
 test('闲时凭据：没有 zcodejwttoken → not-applicable，说没用账号登录', async () => {
@@ -301,7 +301,7 @@ test('闲时凭据：没有 zcodejwttoken → not-applicable，说没用账号�
   const file = await writeCredentials(entries);
   const out = readOffPeakAuth({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.equal(out.kind, 'not-applicable');
-  assert.match(out.error, /登录/);
+  assert.match(out.error, /no account login/);
 });
 
 test('闲时凭据：没有账号信息（active_provider）→ not-applicable', async () => {
@@ -310,14 +310,14 @@ test('闲时凭据：没有账号信息（active_provider）→ not-applicable',
   const file = await writeCredentials(entries);
   const out = readOffPeakAuth({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.equal(out.kind, 'not-applicable');
-  assert.match(out.error, /登录/);
+  assert.match(out.error, /no account login/);
 });
 
 test('闲时凭据：只有团队版 key → not-applicable「团队版暂不支持闲时投递」', async () => {
   const file = await writeCredentials(offPeakEntries({ individual: false }));
   const out = readOffPeakAuth({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.equal(out.kind, 'not-applicable');
-  assert.match(out.error, /团队版暂不支持闲时投递/);
+  assert.match(out.error, /does not support the team plan/);
 });
 
 test('闲时凭据：两把 key 都没有 → not-applicable', async () => {
@@ -383,7 +383,7 @@ test('start plan 凭据：凭据文件不存在 → not-applicable，说没用�
   const file = path.join(os.tmpdir(), `zcode-cred-none-${Date.now()}.json`);
   const out = readStartPlanAuth({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.equal(out.kind, 'not-applicable');
-  assert.match(out.error, /登录/);
+  assert.match(out.error, /no account login/);
 });
 
 test('start plan 凭据：没有 active_provider → not-applicable', async () => {

@@ -101,7 +101,7 @@ test('status：runner 已死而闲时投递没收尾时提示用 --offpeak --res
   await waitRunnerGone(s.runsDir);
   trackPids(s.runsDir);
   const human = await runBin(s.env, ['status', s.entry.id]);
-  assert.match(human.stdout, new RegExp(`^ {2}闲时：投递 offpeak-[0-9a-f-]{36} 没收尾，runner 已不在：用 send ${s.entry.id} --offpeak --resume 接着跑，或 cancel`, 'm'));
+  assert.match(human.stdout, new RegExp(`offpeak-[0-9a-f-]{36} not settled, runner is gone: run send ${s.entry.id} --offpeak --resume to continue, or cancel`, 'm'));
   await assertNoSecrets(s, [r.stdout, r.stderr, human.stdout, human.stderr]);
 });
 

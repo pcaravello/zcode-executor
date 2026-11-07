@@ -502,7 +502,7 @@ test('挂起时 approve 与 cancel 并发 → eventType executor.deny、人读�
   assert.equal(out.applied, true); // 挂起确实被消费了
   assert.equal(out.eventType, 'executor.deny'); // 但消费它的是 cancel 的替人拒答
   const denyEvent = readEvents(first.env.runsDir).find((e) => e.type === 'executor.deny' && e.requestId === out.requestId);
-  assert.equal(denyEvent.reason, '任务已取消'); // 事件带 reason（runner 替人拒答也写事件）
+  assert.equal(denyEvent.reason, 'task cancelled'); // 事件带 reason（runner 替人拒答也写事件）
   await waitFor(async () => (existsSync(path.join(first.env.runsDir, 'lock')) ? undefined : true), { timeoutMs: 20000 });
 
   // 第二遍：人读输出如实说被拒

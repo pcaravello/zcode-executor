@@ -92,7 +92,7 @@ test('thoughtLevelFor：explicit 且不合法 → ExecutorError(2) 并列出档�
     assert.ok(err instanceof ExecutorError);
     assert.equal(err.exitCode, 2);
     assert.match(err.message, /ultra/);
-    assert.match(err.message, /low、high、max/); // 列出合法档位
+    assert.match(err.message, /low, high, max/); // 列出合法档位
     return true;
   });
   const flash = M('GLM-5.3-Flash'); // 模型没有任何档位

@@ -299,7 +299,7 @@ test('cancel：回合进行中 cancel → mock 收到 session/stop，last 结算
   );
   const last = JSON.parse(await readFile(path.join(env.runsDir, 'last.json'), 'utf8'));
   assert.equal(last.outcome, 'cancelled');
-  assert.equal(last.reason, '已被 cancel 叫停');
+  assert.equal(last.reason, 'stopped by cancel');
   const queueLeft = await readdir(path.join(env.runsDir, 'queue'));
   assert.equal(queueLeft.filter((f) => f.endsWith('.json')).length, 0); // 队列清空
   assert.ok(readEvents(env.runsDir).some((e) => e.type === 'executor.cancel')); // events 有 executor.cancel
@@ -355,7 +355,7 @@ test('cancel：会话不在登记簿 → 退出码 2', async (t) => {
   const env = await setupOps(t);
   const run = runBin(env.env, ['cancel', 'sess_missing']);
   assert.equal(run.status, 2, run.stderr);
-  assert.match(run.stderr, /不在登记簿/);
+  assert.match(run.stderr, /not in the registry/);
 });
 
 // ---------- list ----------
@@ -690,11 +690,11 @@ test('cancel 在挂起出现前被回合内观察点抢走 → 挂起轮询凭 c
   const decline = readRecord(env.recordPath)
     .filter((m) => m.id !== undefined && m.method === undefined)
     .find((m) => m.result?.action === 'decline');
-  assert.equal(decline.result.reason, '任务已取消');
+  assert.equal(decline.result.reason, 'task cancelled');
   // 事件也带 decline 标记（T2.6b 第 2 条）
   const denyEvent = readEvents(env.runsDir).find((e) => e.type === 'executor.deny' && e.decline === true);
   assert.ok(denyEvent, 'events 里要有带 decline:true 的 executor.deny');
-  assert.equal(denyEvent.reason, '任务已取消');
+  assert.equal(denyEvent.reason, 'task cancelled');
   await waitFor(
     async () => (existsSync(path.join(env.runsDir, 'lock')) ? undefined : true),
     { timeoutMs: 20000 },
@@ -899,7 +899,7 @@ test('挂起人读输出带规则原文（T2.9 第 6 条）', async (t) => {
   assert.equal(run.status, 5, run.stderr);
   assert.match(run.stdout, /挂起·审批：Write/);
   assert.match(run.stdout, /规则 outside-worktree：/); // 规则原文被带出来
-  assert.match(run.stdout, /一律转人工/);
+  assert.match(run.stdout, /always escalated to a human/);
   trackRunnerPids(env.runsDir);
   const pending = JSON.parse(await readFile(path.join(env.runsDir, 'pending.json'), 'utf8'));
   assert.equal(pending.ruleId, 'outside-worktree');

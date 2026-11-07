@@ -76,7 +76,7 @@ test('就绪前号接连失效把 3 个号用完：failed「闲时号用完了�
   assert.equal(r.status, 4, r.stderr);
   const out = JSON.parse(r.stdout);
   assert.equal(out.outcome, 'failed');
-  assert.equal(out.reason, '闲时号用完了（共 3 个）');
+  assert.equal(out.reason, 'off-peak tickets are used up (3 in total)');
   await waitRunnerGone(s.runsDir);
   assert.deepEqual(readRecord(s.recordPath), [], '号没就绪不该起 app-server');
   assert.equal(takeRequests(s).length, 3);
@@ -153,7 +153,7 @@ test('运行中号接连失效把 3 个号用完：failed「闲时号用完了�
   assert.equal(r.status, 4, r.stderr);
   const out = JSON.parse(r.stdout);
   assert.equal(out.outcome, 'failed');
-  assert.equal(out.reason, '闲时号用完了（共 3 个）');
+  assert.equal(out.reason, 'off-peak tickets are used up (3 in total)');
   await waitRunnerGone(s.runsDir);
   trackPids(s.runsDir);
   assert.equal(offPeakSends(s).length, 3);
@@ -183,8 +183,8 @@ test('重取号时服务器回 3103：failed，reason 带「几点以后可再�
   trackPids(s.runsDir);
   const last = lastJson(s);
   assert.equal(last.outcome, 'failed');
-  assert.match(last.reason, /额度用完/);
-  assert.match(last.reason, /\d{4}\/\d{1,2}\/\d{1,2} \d{2}:\d{2} 以后可再取/);
+  assert.match(last.reason, /quota is used up/);
+  assert.match(last.reason, /again after \d{4}\/\d{1,2}\/\d{1,2} \d{2}:\d{2}/);
   assert.deepEqual(settledTickets(s), ['mock-ticket-1']);
   assert.equal(eventsOf(s, 'executor.offpeak.retaken').length, 0);
   const op = offpeakJson(s);
@@ -299,7 +299,7 @@ test('结算失败 2 次后成功：结算请求 3 次，settledAt 有值、unse
   assert.match(op.settledAt, /Z$/);
   assert.deepEqual(op.unsettledTickets, []);
   assert.equal(eventsOf(s, 'executor.offpeak.settled').length, 1);
-  assert.doesNotMatch(runnerLog(s), /结算失败/);
+  assert.doesNotMatch(runnerLog(s), /failed to settle/);
   await assertNoSecrets(s, [r.stdout, r.stderr]);
 });
 
@@ -389,9 +389,9 @@ test('旧号结算失败、重取成功、新号结算成功：unsettledTickets 
   assert.match(op.settledAt, /Z$/);
   assert.equal(op.unsettledTickets.length, 1);
   assert.equal(op.unsettledTickets[0].ticketId, 'mock-ticket-1');
-  assert.match(op.unsettledTickets[0].error, /结算失败/);
+  assert.match(op.unsettledTickets[0].error, /settle failed/);
   assert.match(op.unsettledTickets[0].at, /Z$/);
-  assert.equal([...runnerLog(s).matchAll(/^runner: 闲时号 mock-ticket-1 结算失败/gm)].length, 1);
+  assert.equal([...runnerLog(s).matchAll(/^runner: failed to settle off-peak ticket mock-ticket-1/gm)].length, 1);
   await assertNoSecrets(s, [r.stdout, r.stderr]);
 });
 

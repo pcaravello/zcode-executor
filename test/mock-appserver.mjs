@@ -203,7 +203,7 @@ const record = (msg) => {
     appendFileSync(file, `${redactSecretValues(JSON.stringify(msg))}\n`);
   } catch {
     // 记录文件写不了不影响协议行为，只在 stderr 提一句
-    log(`record 写入失败：${file}`);
+    log(`failed to write the record file: ${file}`);
   }
 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -214,7 +214,7 @@ if (process.env.MOCK_APPSERVER_SCRIPT) {
   try {
     script = JSON.parse(readFileSync(process.env.MOCK_APPSERVER_SCRIPT, 'utf8'));
   } catch (err) {
-    log(`剧本读不出来 ${process.env.MOCK_APPSERVER_SCRIPT}：${err.message}`);
+    log(`cannot read the script ${process.env.MOCK_APPSERVER_SCRIPT}: ${err.message}`);
     process.exit(1);
   }
 }
@@ -295,7 +295,7 @@ function validateAnswer(method, result) {
   } else if (method === RUNTIME_HEADERS_METHOD) {
     ok = typeof result?.headersApplied === 'boolean';
   }
-  if (!ok) log(`应答形状不对 ${method}: ${json}`);
+  if (!ok) log(`unexpected answer shape ${method}: ${json}`);
 }
 
 // ---------- 默认形状 ----------
@@ -538,7 +538,7 @@ async function runTurn(sessionId, sendParams) {
   if (turn.completeDelayMs) await sleep(turn.completeDelayMs);
   if (stopped()) return;
   if (turn.hang) {
-    log('turn hang：不再推任何事件');
+    log('turn hang: not pushing any more events');
     return;
   }
   if (turn.fail) {
@@ -638,7 +638,7 @@ function handleRequest(msg) {
     return;
   }
   if (script.hangMethods?.includes(method)) {
-    log(`hang ${method}：不应答`);
+    log(`hang ${method}: not answering`);
     return;
   }
 
@@ -756,7 +756,7 @@ function handleRequest(msg) {
         log('notification ignored: session/stop');
         break;
       }
-      log(`session/stop 收到（sessionId=${params.sessionId ?? 'none'}）`);
+      log(`session/stop received (sessionId=${params.sessionId ?? 'none'})`);
       respond(id, {});
       // 剧本 stopIgnored:true 时只应答不叫停：cancel 与挂起赛跑的用例要提问照常出现
       if (state.activeTurn && script.stopIgnored !== true) state.stopRequested = true;
@@ -822,7 +822,7 @@ function handleRequest(msg) {
           Object.entries(params.providers ?? {}).filter(([, p]) => p?.access?.entitled === true).map(([providerId]) => providerId),
         );
       } else {
-        log(`updateAccountConfig 版本号对不上，整份忽略（期望 ${expected}）`);
+        log(`updateAccountConfig revision mismatch, ignoring the whole config (expected ${expected})`);
       }
       respond(id, {
         receivedRevision: params.revision,
@@ -889,7 +889,7 @@ function handleRequest(msg) {
       }
       if (type === 'stop') {
         // 本机探针：type:"stop"、payload:{} 指向空闲会话 → {status:"accepted"}；叫停逻辑同 session/stop
-        log(`v4 stop 收到（sessionId=${sessionId}）`);
+        log(`v4 stop received (sessionId=${sessionId})`);
         respond(id, { commandId, status: 'accepted', revisionAtDecision: 0 });
         if (state.activeTurn && script.stopIgnored !== true) state.stopRequested = true;
         break;
@@ -936,7 +936,7 @@ rl.on('line', (line) => {
   try {
     msg = JSON.parse(trimmed);
   } catch {
-    log('收到非 JSON 行，忽略');
+    log('non-JSON line received, ignored');
     return;
   }
   collectSecrets(msg); // 必须在写记录前收集，这一条消息里的 key 才抹得掉
@@ -951,7 +951,7 @@ rl.on('line', (line) => {
 });
 rl.on('close', () => {
   if (script.ignoreEof) {
-    log('ignoreEof：收到 stdin EOF 不退出');
+    log('ignoreEof: stdin EOF received, not exiting');
     return; // 常驻句柄在下面挂着，进程等 SIGKILL
   }
   process.exit(0);

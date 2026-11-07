@@ -34,7 +34,7 @@ test('排号中 cancel：runner 停止轮询、结算当前号，投递以 cance
   await waitRunnerGone(s.runsDir);
   const last = lastJson(s);
   assert.equal(last.outcome, 'cancelled');
-  assert.equal(last.reason, '已被 cancel 叫停');
+  assert.equal(last.reason, 'stopped by cancel');
   assert.equal(last.text, '闲时的活');
   assert.deepEqual(resultsOf(s), ['cancelled']);
   assert.deepEqual(settledTickets(s), ['mock-ticket-1']);
@@ -103,7 +103,7 @@ test('runner 已死时 cancel、结算失败：只请求一次，号记进 unset
   trackPids(s.runsDir);
   const cancel = await runBin(s.env, ['cancel', s.entry.id]);
   assert.equal(cancel.status, 0, cancel.stderr);
-  assert.equal([...cancel.stderr.matchAll(/^cancel: 闲时号 mock-ticket-1 结算失败/gm)].length, 1, cancel.stderr);
+  assert.equal([...cancel.stderr.matchAll(/^cancel: failed to settle off-peak ticket mock-ticket-1/gm)].length, 1, cancel.stderr);
   assert.match(cancel.stdout, /结算失败/);
   assert.equal(settleRequests(s).length, 1, '不退避重试');
   const op = offpeakJson(s);
@@ -163,7 +163,7 @@ test('孤儿号结算失败：stderr 一行，照样取新号开跑', async (t) 
   const r = await runBin(s.env, ['send', s.entry.id, '新的活', '--offpeak', '--wait', '--json']);
   trackPids(s.runsDir);
   assert.equal(r.status, 0, r.stderr);
-  assert.equal([...r.stderr.matchAll(new RegExp(`^send: 闲时号 ${ticket.ticket_id} 结算失败`, 'gm'))].length, 1, r.stderr);
+  assert.equal([...r.stderr.matchAll(new RegExp(`^send: failed to settle off-peak ticket ${ticket.ticket_id}`, 'gm'))].length, 1, r.stderr);
   await waitRunnerGone(s.runsDir);
   assert.equal(takeRequests(s).length, 2);
   await assertNoSecrets(s, [r.stdout, r.stderr]);

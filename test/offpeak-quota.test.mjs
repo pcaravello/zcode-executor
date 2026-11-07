@@ -180,7 +180,7 @@ test('quota：闲时服务地址配错 → 报错退出码 1，不发请求', as
   const r = await runBin({ ...s.env, ZCODE_EXECUTOR_OFFPEAK_ORIGIN: 'http://example.com' }, ['quota']);
   assert.equal(r.status, 1);
   assert.equal(r.stdout, '');
-  assert.match(r.stderr, /^quota: 闲时服务地址必须是 https/);
+  assert.match(r.stderr, /^quota: the off-peak server address must be https/);
   assert.deepEqual(s.server.requests, []);
 });
 

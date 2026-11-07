@@ -338,7 +338,7 @@ test('剧本 v4CommandStatus: rejected → executor.steer_failed + steerUnavaila
   assert.equal(steer.status, 0, steer.stderr); // steerUnavailable 还没置上：入队放行
   await waitFor(async () => (readEvents(env.runsDir).some((e) => e.type === 'executor.steer_failed') ? true : undefined));
   const failed = readEvents(env.runsDir).find((e) => e.type === 'executor.steer_failed');
-  assert.match(failed.reason, /v4 命令 sendText 未被接受：rejected/);
+  assert.match(failed.reason, /v4 command sendText was not accepted: rejected/);
   assert.equal(failed.text, '插句话'); // 返工第 2 条：失败也留正文
   const state = JSON.parse(await readFile(path.join(env.runsDir, 'state.json'), 'utf8'));
   assert.match(state.steerUnavailable, /rejected/);
@@ -444,7 +444,7 @@ test('陈年 answer.json：无 requestId 不被答；带正确 requestId 才被�
   await writeFile(path.join(env.runsDir, 'answer.json'), JSON.stringify({ decision: 'allow', requestId: 'req_wrong' }));
   await waitFor(async () => {
     const log = await readFile(path.join(env.runsDir, 'runner.log'), 'utf8').catch(() => '');
-    return /requestId 对不上/.test(log) ? log : undefined;
+    return /requestId does not match/.test(log) ? log : undefined;
   });
   assert.equal(existsSync(path.join(env.runsDir, 'pending.json')), true); // 还挂着
   const pending = JSON.parse(await readFile(path.join(env.runsDir, 'pending.json'), 'utf8'));
@@ -481,7 +481,7 @@ test('连发两条不 --wait：队列按时间戳顺序投递，两条都进 eve
   const b = runBin(env.env, ['send', env.entry.id, '第二件']);
   assert.equal(a.status, 0, a.stderr);
   assert.equal(b.status, 0, b.stderr);
-  assert.match(a.stdout, /已排队，runner pid \d+/);
+  assert.match(a.stdout, /queued, runner pid \d+/);
   await waitFor(async () => {
     const events = readEvents(env.runsDir).filter((e) => e.type === 'executor.result');
     return events.length >= 2 ? events : undefined;
@@ -505,7 +505,7 @@ test('_runner：已有活 runner → 退出码 2；死 pid 的陈年锁 → 新 
   trackRunnerPids(env.runsDir); // 这个 runner 最后要靠 after() 杀
   const second = runBin(env.env, ['_runner', env.entry.id]);
   assert.equal(second.status, 2, `stderr: ${second.stderr}`);
-  assert.match(second.stderr, /已有 runner/);
+  assert.match(second.stderr, /already running/);
 
   // 杀掉活 runner（留下死锁与未消费的队列项），写一个死 pid 的锁，新 runner 应当覆盖锁、
   // 重投队列里那一条并正常退出。先把剧本换成能完成的：新 runner 起来时读到的是新剧本
@@ -588,7 +588,7 @@ test('投递重投超过 2 次 → 按 failed 丢弃并清队列（评审 T2.3b 
   assert.equal(third.status, 0, third.stderr); // runner 正常收场
   const last = JSON.parse(await readFile(path.join(env.runsDir, 'last.json'), 'utf8'));
   assert.equal(last.outcome, 'failed');
-  assert.match(last.reason, /重投 2 次/);
+  assert.match(last.reason, /after 2 attempts/);
   const left = await readdir(path.join(env.runsDir, 'queue'));
   assert.equal(left.filter((f) => f.endsWith('.json')).length, 0);
   const failedEvents = readEvents(env.runsDir).filter((e) => e.type === 'executor.result' && e.outcome === 'failed');
@@ -624,11 +624,11 @@ test('runner 启动白名单复查：登记簿 cwd 改到白名单外 → _runne
   await writeFile(registryPath, JSON.stringify(registry));
   const run = runBin(env.env, ['_runner', env.entry.id]);
   assert.equal(run.status, 2, `stderr: ${run.stderr}`);
-  assert.match(run.stderr, /不在白名单/);
+  assert.match(run.stderr, /outside the allowed roots/);
   assert.equal(existsSync(path.join(env.runsDir, 'lock')), false); // 锁清掉了
   const state = JSON.parse(await readFile(path.join(env.runsDir, 'state.json'), 'utf8'));
   assert.equal(state.phase, 'exited'); // state 写了 exited 带 error（T2.3b 第 14 条）
-  assert.match(state.error, /白名单/);
+  assert.match(state.error, /allowed roots/);
 });
 
 test('runner.log 不含明文密钥（评审 T2.3b 第 10 条）', async (t) => {
@@ -704,7 +704,7 @@ test('send：会话不在登记簿 → 退出码 2', async (t) => {
   const env = await setupSend(t);
   const run = runBin(env.env, ['send', 'sess_missing', '干活']);
   assert.equal(run.status, 2, `stderr: ${run.stderr}`);
-  assert.match(run.stderr, /不在登记簿/);
+  assert.match(run.stderr, /not in the registry/);
 });
 
 test('send：正文 - 从 stdin 读', async (t) => {
