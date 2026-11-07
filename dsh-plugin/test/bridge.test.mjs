@@ -93,7 +93,7 @@ test('zenRemote 服务在但没有 bridge 方法（zen-remote 过旧）：warn �
   const { ctx, effects } = fakeCtx({ hasService: true, service: {} });
   registerBridgeDeclaration(ctx, { warn: (fmt, ...args) => warns.push(`${fmt} ${args.join(' ')}`) });
   assert.equal(warns.length, 1);
-  assert.match(warns[0], /bridge 方法/);
+  assert.match(warns[0], /bridge method/);
   assert.deepEqual(effects, []);
 });
 
@@ -103,6 +103,6 @@ test('声明被拒（bridge 抛错）：warn 降级，插件行不受影响', ()
   const { ctx, effects } = fakeCtx({ hasService: true, service: zen.service });
   registerBridgeDeclaration(ctx, { warn: (fmt, ...args) => warns.push(`${fmt} ${args.join(' ')}`) });
   assert.equal(warns.length, 1);
-  assert.match(warns[0], /被拒绝/);
+  assert.match(warns[0], /rejected/);
   assert.deepEqual(effects, []); // 没挂 effect：没有登记成功这回事
 });

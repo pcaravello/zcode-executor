@@ -14,15 +14,21 @@ import { ensureSkillLink } from '../src/skill-link.ts';
 test('派单教学与公告：原会话闭环、非阻塞、授权分流及安全边界', async () => {
   const skill = await readFile(new URL('../skills/zcode-executor/SKILL.md', import.meta.url), 'utf8');
   const host = await readFile(new URL('../src/index.ts', import.meta.url), 'utf8');
+  // 公告（D26 起英文）与 skill（根仓库单一事实源，软链进来）对同一套闭环概念：两边都要有。
+  // skill 侧两种语言都认——根 skills/ 的翻译属于根仓库的任务，这里不该被它的进度卡住。
+  assert.match(host, /original executor session/);
+  assert.match(host, /original review session/);
+  assert.match(host, /independent work/);
+  assert.match(host, /upper-level approval limits/);
+  assert.match(skill, /原执行会话|original executor session/);
+  assert.match(skill, /原 review 会话|original review session/);
+  assert.match(skill, /独立工作|independent work/);
+  assert.match(skill, /上层.*限制|higher-level instructions|approval restrictions/);
   for (const text of [skill, host]) {
-    assert.match(text, /原执行会话/);
-    assert.match(text, /原 review 会话/);
-    assert.match(text, /独立工作/);
-    assert.match(text, /上层.*限制/);
     assert.doesNotMatch(text, /审批请求与提问必须转交用户|挂起必转交用户/);
   }
   assert.match(skill, /expected-requestId\/CAS/);
-  assert.match(skill, /外部串行化/);
+  assert.match(skill, /外部串行化|external serialization/);
   const sends = skill.split('\n').filter(line => /^\s*zcode-executor send .*--task "/.test(line));
   assert.ok(sends.length > 0);
   assert.ok(sends.every(line => !line.includes('--wait')), '可执行投递示例默认非阻塞');
@@ -145,7 +151,7 @@ test('dshHome 指向普通文件：mkdir 失败 → warn + outcome error，dispo
     console.warn = originalWarn;
   }
   assert.equal(handle.outcome, 'error', '建链失败应报 error，不向上抛');
-  assert.ok(warns.some((msg) => msg.includes('建 skill 软链失败')), `应有失败 warn，实际: ${JSON.stringify(warns)}`);
+  assert.ok(warns.some((msg) => msg.includes('failed to create the skill symlink')), `应有失败 warn，实际: ${JSON.stringify(warns)}`);
   await ctx.disposers[0](); // 只许不抛地空跑：普通文件不是本包链接，disposer 不许动它
   assert.equal(await readFile(fileHome, 'utf8'), 'x', 'disposer 不得动 dshHome 上的普通文件');
 });

@@ -64,7 +64,7 @@ async function routeScopeRepo(
   } catch (error) {
     if (!isCurrent()) return;
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[zcode-executor] 解析当前项目所属仓库失败，面板显示全部：${message}`);
+    console.warn(`[zcode-executor] failed to resolve the current project's repository; the pane shows all projects: ${message}`);
     store.setScopeRepo(null);
   }
 }
@@ -77,7 +77,7 @@ async function routeScopeRepo(
 export function apply(ctx: Context): void {
   // 构建号：真机排障用（宿主模块缓存按应用会话发旧 bundle，2026-10-07 连续两轮踩坑）——
   // devtools Console 里一眼核对跑的是哪版；改动记号见 git/构建时间，格式 YYYYMMDD-HHMM。
-  console.info('[zcode-executor] 面板构建 20261010-1200（插件桥：远程会话看主服务端任务）');
+  console.info('[zcode-executor] pane build 20261010-1200 (plugin bridge: remote sessions watch the main server tasks)');
   // 面板数据 store：每插件激活一份；start/stop 跟 fiber 走，状态不清（重载后面板保留旧数据
   // 直到流重连，重连首轮按基线对齐——归约器语义）。侧切换的清屏重开在 store.setSession 里。
   const store = createSnapshotStore({ baseUrl: BASE_URL });

@@ -108,7 +108,7 @@ test('synced 后退出：down 带重连说明，短间隔后重起；重起到 s
   wp.start();
   await waitFor(() => wp.getSnapshot().synced);
   await waitFor(() => wp.getSnapshot().link === 'down');
-  assert.match(wp.getSnapshot().message, /实时连接中断/);
+  assert.match(wp.getSnapshot().message, /Live connection lost/);
   await waitFor(() => wp.getSnapshot().link === 'starting'); // 重起窗口：旧表保留、回到未同步
   assert.equal(wp.getSnapshot().synced, false);
   assert.deepEqual(Object.keys(wp.getSnapshot().table), ['a']);
@@ -124,7 +124,7 @@ test('synced 前退出：failed 带起不来的原因与 stderr 尾巴，不重�
   const wp = makeWp(t);
   wp.start();
   await waitFor(() => wp.getSnapshot().link === 'failed');
-  assert.match(wp.getSnapshot().message, /启动 watch 失败/);
+  assert.match(wp.getSnapshot().message, /Failed to start watch/);
   assert.match(wp.getSnapshot().message, /登记簿读不出来/);
   await sleep(80);
   assert.equal(s.runs(), 1); // failed 不重起
@@ -135,8 +135,8 @@ test('没有任何输出就退出也按 failed 报（原因落到退出码）', 
   const wp = makeWp(t);
   wp.start();
   await waitFor(() => wp.getSnapshot().link === 'failed');
-  assert.match(wp.getSnapshot().message, /启动 watch 失败：/);
-  assert.match(wp.getSnapshot().message, /退出码 1/);
+  assert.match(wp.getSnapshot().message, /Failed to start watch:/);
+  assert.match(wp.getSnapshot().message, /exit code 1/);
 });
 
 test('execPath 指向不存在的路径：failed、原因可读并提示 execPath 配置，不重试', async (t) => {

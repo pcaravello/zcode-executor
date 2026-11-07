@@ -60,17 +60,17 @@ export function registerBridgeDeclaration(ctx, logger) {
         // inject 已等到服务；运行时值仍不受类型标注约束，先认值再调（register-tab.ts 同款镜像法）
         const service = bridgeCtx.zenRemote;
         if (typeof service?.bridge !== 'function') {
-            logger?.warn?.('zenRemote 服务存在但没有 bridge 方法（zen-remote 版本过旧），插件桥不登记');
+            logger?.warn?.('zenRemote service exists but has no bridge method (zen-remote too old); plugin bridge not registered');
             return;
         }
         try {
             const dispose = service.bridge(bridgeDeclaration());
             bridgeCtx.effect(() => dispose, 'zcode-executor: zenRemote bridge declaration');
-            logger?.info?.('插件桥声明已登记（%s 条路由，版本 %s）', 3, PACKAGE_VERSION);
+            logger?.info?.('plugin bridge declaration registered (%s routes, version %s)', 3, PACKAGE_VERSION);
         }
         catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            logger?.warn?.('插件桥声明被拒绝：%s（远程会话面板将回未桥接态，其余功能不受影响）', message);
+            logger?.warn?.('plugin bridge declaration rejected: %s (the remote pane will show the unbridged state; everything else keeps working)', message);
         }
     });
 }

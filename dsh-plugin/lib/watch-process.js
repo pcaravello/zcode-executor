@@ -16,9 +16,9 @@
 import { spawn } from 'node:child_process';
 /** watch 起不来时面板上的说明：只有看得出是找不到可执行文件时才提 execPath 配置项。 */
 function startFailure(reason) {
-    const text = reason.trim() || 'watch 没有输出就退出了';
+    const text = reason.trim() || 'watch exited without any output';
     const noPath = /ENOENT|No such file|not found/i.test(text);
-    return `启动 watch 失败：${text}${noPath ? '。可在插件配置里检查 execPath（watch CLI 路径）' : ''}`;
+    return `Failed to start watch: ${text}${noPath ? '. You can set the executable path (execPath) in the plugin settings' : ''}`;
 }
 export class WatchProcess {
     execPath;
@@ -150,7 +150,7 @@ export class WatchProcess {
                 parsed = JSON.parse(line);
             }
             catch {
-                this.logger?.debug?.('zcode-executor: watch 输出一行不是 JSON，跳过：%s', line.slice(0, 120));
+                this.logger?.debug?.('zcode-executor: watch printed a line that is not JSON, skipping: %s', line.slice(0, 120));
                 continue;
             }
             this.applyLine(parsed);
@@ -222,15 +222,15 @@ export class WatchProcess {
         }
         const tail = this.stderrTail.trim();
         if (!this.runSynced) {
-            this.setLink('failed', startFailure(tail || `退出码 ${code ?? '未知'}`));
+            this.setLink('failed', startFailure(tail || `exit code ${code ?? 'unknown'}`));
             return;
         }
         this.scheduleRestart(tail);
     }
     /** synced 之后断开：报 down 带原因，restartMs 后重起（重起到下个 synced 之间的行只作新基线）。 */
     scheduleRestart(tail) {
-        const why = tail ? `（${tail.split('\n').pop()}）` : '';
-        this.setLink('down', `实时连接中断${why}，${Math.round(this.restartMs / 1000)} 秒后重连`);
+        const why = tail ? ` (${tail.split('\n').pop()})` : '';
+        this.setLink('down', `Live connection lost${why}, reconnecting in ${Math.round(this.restartMs / 1000)} s`);
         this.restartTimer = setTimeout(() => {
             this.restartTimer = null;
             this.start();

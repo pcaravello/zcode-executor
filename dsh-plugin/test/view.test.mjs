@@ -91,32 +91,32 @@ test('刚结束的卡片正好 30 分钟还在，再过一分钟缩成一行', (
 test('卡片标题文案：审批请求、提问、中断、执行中、闲时排队与就绪', () => {
   // pendingDetail 形状出处：zcode-executor lib/snapshot.mjs:219-230
   assert.deepEqual(headOf(snap({ phase: 'pending', pendingDetail: { kind: 'permission', toolName: 'Bash', summary: 'rm -rf x', reason: '越界' } })),
-    { kind: 'glyph', glyph: '⏸', label: '挂起：审批请求（Bash）', color: 'warning' });
-  assert.equal(headOf(snap({ phase: 'pending', pendingDetail: { kind: 'question', questionTexts: ['a', 'b'] } })).label, '挂起：提问 2 条');
-  assert.equal(headOf(snap({ phase: 'stale' })).label, '执行进程已中断');
-  assert.deepEqual(headOf(snap({ phase: 'running' })), { kind: 'pulse', label: '执行中', color: 'success' });
+    { kind: 'glyph', glyph: '⏸', label: 'Pending: permission request (Bash)', color: 'warning' });
+  assert.equal(headOf(snap({ phase: 'pending', pendingDetail: { kind: 'question', questionTexts: ['a', 'b'] } })).label, 'Pending: question (2)');
+  assert.equal(headOf(snap({ phase: 'stale' })).label, 'Runner interrupted');
+  assert.deepEqual(headOf(snap({ phase: 'running' })), { kind: 'pulse', label: 'Running', color: 'success' });
   // offpeakQueue 形状出处：zcode-executor lib/snapshot.mjs:205-206
-  assert.equal(headOf(snap({ phase: 'running', offpeakQueue: { phase: 'queued', position: 3 } })).label, '闲时排队中，第 3 位');
-  assert.equal(headOf(snap({ phase: 'running', offpeakQueue: { phase: 'ready', position: null } })).label, '闲时已就绪，等待开始');
-  assert.equal(headOf(snap({ phase: 'running', offpeakQueue: { phase: 'queued', position: null } })).label, '闲时排队中');
+  assert.equal(headOf(snap({ phase: 'running', offpeakQueue: { phase: 'queued', position: 3 } })).label, 'Waiting in the off-peak queue, position 3');
+  assert.equal(headOf(snap({ phase: 'running', offpeakQueue: { phase: 'ready', position: null } })).label, 'Off-peak send ready, waiting to start');
+  assert.equal(headOf(snap({ phase: 'running', offpeakQueue: { phase: 'queued', position: null } })).label, 'Waiting in the off-peak queue');
 });
 
 test('已结束的结果文案：各结果、空闲、没有结果记录的已退出、认不出的原样给出', () => {
-  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'done' })).label, '已完成');
-  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'timeout' })).label, '已超时');
-  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'failed' })).label, '执行失败');
-  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'exited' })).label, '执行失败');
-  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'cancelled' })).label, '已取消');
-  assert.equal(outcomeOf(snap({ phase: 'idle', lastOutcome: null })).label, '空闲');
-  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: null })).label, '已退出');
+  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'done' })).label, 'done');
+  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'timeout' })).label, 'timed out');
+  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'failed' })).label, 'failed');
+  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'exited' })).label, 'failed');
+  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'cancelled' })).label, 'cancelled');
+  assert.equal(outcomeOf(snap({ phase: 'idle', lastOutcome: null })).label, 'idle');
+  assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: null })).label, 'exited');
   assert.equal(outcomeOf(snap({ phase: 'exited', lastOutcome: 'weird' })).label, 'weird');
 });
 
 test('卡片右上角时长：执行中、挂起、排队、中断各自的说法，没有 since 或解析不了不显示', () => {
-  assert.equal(cornerOf(snap({ phase: 'running', since: ago(12) }), NOW), '已运行 12 分钟');
-  assert.equal(cornerOf(snap({ phase: 'pending', since: ago(3) }), NOW), '已等待 3 分钟');
-  assert.equal(cornerOf(snap({ phase: 'running', since: ago(75), offpeakQueue: { phase: 'queued', position: 1 } }), NOW), '已排 1 小时 15 分');
-  assert.equal(cornerOf(snap({ phase: 'stale', since: ago(0) }), NOW), '不到 1 分钟');
+  assert.equal(cornerOf(snap({ phase: 'running', since: ago(12) }), NOW), 'Running 12 min');
+  assert.equal(cornerOf(snap({ phase: 'pending', since: ago(3) }), NOW), 'Waiting 3 min');
+  assert.equal(cornerOf(snap({ phase: 'running', since: ago(75), offpeakQueue: { phase: 'queued', position: 1 } }), NOW), 'Queued 1 h 15 min');
+  assert.equal(cornerOf(snap({ phase: 'stale', since: ago(0) }), NOW), 'under 1 min');
   assert.equal(cornerOf(snap({ phase: 'running', since: null }), NOW), null);
   assert.equal(elapsed('不是时间', NOW), null);
 });
@@ -152,8 +152,8 @@ test('缺字段容错：缺 phase 的会话不进任何段；缺 pendingDetail �
   assert.deepEqual(s.recent, []);
   assert.deepEqual(s.rows, []);
   assert.deepEqual(s.counts, { todo: 0, doing: 0, done: 0 });
-  assert.equal(headOf(snap({ phase: 'pending' })).label, '挂起：审批请求（未知工具）');
-  assert.equal(outcomeOf({ id: 'x' }).label, '已退出'); // phase 与 lastOutcome 都缺
+  assert.equal(headOf(snap({ phase: 'pending' })).label, 'Pending: permission request (unknown tool)');
+  assert.equal(outcomeOf({ id: 'x' }).label, 'exited'); // phase 与 lastOutcome 都缺
   assert.deepEqual(filterByRepo([{ id: 'a' }, snap({ id: 'b' })], '/repo/app').map((x) => x.id), ['b']); // 缺 repo 字段的会话被过滤掉
   assert.equal(cornerOf({ id: 'x', phase: 'running' }, NOW), null);
 });

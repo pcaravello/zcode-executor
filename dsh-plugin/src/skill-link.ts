@@ -71,13 +71,13 @@ export async function ensureSkillLink(ctx: EffectHost, dshHome: string = default
     } else {
       outcome = 'foreign'
       console.warn(
-        `[dsh-zcode-executor] ${linkPath} 已存在且不指向本插件的 skill（${target}），不覆盖；`
-        + '要启用派单教学请手动移走它，再重载插件行',
+        `[dsh-zcode-executor] ${linkPath} already exists and does not point at this plugin's skill (${target}); left untouched. `
+        + 'To enable dispatch teaching, move it away and reload the plugin row',
       )
     }
   } catch (e) {
     outcome = 'error'
-    console.warn(`[dsh-zcode-executor] 建 skill 软链失败（不致命，skill 教学不可用）: ${e instanceof Error ? e.message : String(e)}`)
+    console.warn(`[dsh-zcode-executor] failed to create the skill symlink (non-fatal, dispatch teaching unavailable): ${e instanceof Error ? e.message : String(e)}`)
   }
 
   // dispose：包卸载时清掉自己的链接，防坏链。disposer 返回 Promise，cordis 卸载会 await 它
@@ -85,7 +85,7 @@ export async function ensureSkillLink(ctx: EffectHost, dshHome: string = default
   try {
     ctx.effect(() => () => removeOwnLink(linkPath, target), 'zcode-executor: skill link')
   } catch (e) {
-    console.warn(`[dsh-zcode-executor] 挂 skill 软链的 dispose 失败（不致命）: ${e instanceof Error ? e.message : String(e)}`)
+    console.warn(`[dsh-zcode-executor] failed to register the skill symlink dispose (non-fatal): ${e instanceof Error ? e.message : String(e)}`)
   }
 
   return { linkPath, target, outcome }

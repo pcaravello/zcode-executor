@@ -57,10 +57,10 @@ interface SystemPromptSlice {
  * 工作模式与授权边界；具体分流和应答安全条件以 skill 为准。
  */
 const ANNOUNCE_TO_AGENT = [
-  '本机有 zcode-executor 派单通道：把一件想清楚的开发任务写成任务单，派给本机 ZCode（GLM）'
-  + '在隔离的执行副本（git worktree）里执行，用 git diff 和测试客观验收。',
-  '派单前读取 skill「zcode-executor」：主 agent 编排，返工投原执行会话、复审交原 review 会话；投递后先推进独立工作，无事可做再等待。',
-  '挂起先按任务授权判断，遵守 skill 的应答安全条件及上层审批限制；越界、无法确认或规则要求人工决定的才转用户。',
+  'This machine has a zcode-executor dispatch channel: write a thought-through development task as a task file, dispatch it to the local ZCode (GLM), '
+  + 'which executes it in an isolated worktree (git worktree) and is accepted objectively with git diff and tests.',
+  'Before dispatching, read the skill "zcode-executor": the main agent orchestrates, rework goes back to the original executor session and re-review to the original review session; after dispatching, push independent work first and only wait when there is nothing else to do.',
+  'Judge pendings against the task authorization first, and follow the skill\'s answer-safety conditions and upper-level approval limits; only escalate to the user when out of bounds, impossible to confirm, or the rules require a human decision.',
 ].join('')
 
 /**
@@ -86,7 +86,7 @@ export function apply(ctx: Context, config: RowConfig = {}): void {
   void ensureSkillLink(ctx, defaultDshHome()).then((handle) => {
     if (handle.outcome !== 'foreign' && handle.outcome !== 'error') return
     ctx.logger.warn(
-      'skill 软链未就绪（%s：%s），公告仍会引用 skill「zcode-executor」，智能体可能查不到教学',
+      'skill symlink not ready (%s: %s); the announcement still references the "zcode-executor" skill, which the agent may not find',
       handle.outcome,
       handle.linkPath,
     )
@@ -100,9 +100,9 @@ export function apply(ctx: Context, config: RowConfig = {}): void {
     if (!settings.announceToAgent || !host.systemPrompt) return
     try {
       host.systemPrompt.section({ name: 'zcode-executor', order: 150, text: ANNOUNCE_TO_AGENT })
-      ctx.logger.info('派单公告已挂进 system prompt（announceToAgent）')
+      ctx.logger.info('dispatch announcement attached to the system prompt (announceToAgent)')
     } catch (e) {
-      console.warn(`[dsh-zcode-executor] 无法注册 system prompt 公告: ${e instanceof Error ? e.message : String(e)}`)
+      console.warn(`[dsh-zcode-executor] failed to register the system prompt announcement: ${e instanceof Error ? e.message : String(e)}`)
     }
   })
 

@@ -190,15 +190,15 @@ test('mockup 样板抽查：行流进归约器，分段、标题与时长角标�
   assert.deepEqual(s.todo.map((x) => x.id), ['x_9f31c2a0']);
   assert.deepEqual(s.doing.map((x) => x.id), ['x_a1b2c3d4', 'x_77aa01ff']); // 新的在前
   assert.deepEqual(s.recent.map((x) => x.id), ['x_4e0b19cc']); // 30 分钟窗口内的已完成成卡片（夹具里只有它够新）
-  assert.equal(headOf(s.todo[0]).label, '挂起：审批请求（Bash）'); // pane.html:407
-  assert.equal(headOf(s.doing[0]).label, '执行中');
-  assert.equal(headOf(s.doing[1]).label, '闲时排队中，第 2 位'); // pane.html:463
-  assert.equal(cornerOf(s.todo[0], NOW), '已等待 3 分钟');
-  assert.equal(cornerOf(s.doing[0], NOW), '已运行 6 分钟');
-  assert.equal(cornerOf(s.doing[1], NOW), '已排 12 分钟');
+  assert.equal(headOf(s.todo[0]).label, 'Pending: permission request (Bash)'); // pane.html:407
+  assert.equal(headOf(s.doing[0]).label, 'Running');
+  assert.equal(headOf(s.doing[1]).label, 'Waiting in the off-peak queue, position 2'); // pane.html:463
+  assert.equal(cornerOf(s.todo[0], NOW), 'Waiting 3 min');
+  assert.equal(cornerOf(s.doing[0], NOW), 'Running 6 min');
+  assert.equal(cornerOf(s.doing[1], NOW), 'Queued 12 min');
   // 已结束行：1 张 recent 卡 + 5 行共 6 条，但 sectionsOf 的 5 条上限（view.ts DONE_LIMIT，
   // 语义同 zcode-executor test/view.test.mjs:66）把最旧的已退出行（x_5f0d21ab，09:03）挤掉
   assert.deepEqual(s.rows.map((x) => x.id), ['x_11aaaaaa', 'x_22bbbbbb', 'x_33cccccc', 'x_44dddddd']);
-  assert.equal(outcomeOf(s.rows[0]).label, '已超时'); // pane.html:497
-  assert.equal(outcomeOf(endedRows[4]).label, '已退出'); // 无结果记录的已退出（pane.html:517）；行被上限挤掉，文案对夹具单测
+  assert.equal(outcomeOf(s.rows[0]).label, 'timed out'); // pane.html:497
+  assert.equal(outcomeOf(endedRows[4]).label, 'exited'); // 无结果记录的已退出（pane.html:517）；行被上限挤掉，文案对夹具单测
 });

@@ -588,8 +588,8 @@ for (const status of [401, 403]) {
       store.start();
       await waitFor(() => store.getState().message !== null, '鉴权拒绝的 message 进状态');
       assert.equal(store.getState().link, 'down'); // 横幅位置不变（连接态仍是断开）
-      assert.match(store.getState().message, /无权访问/);
-      assert.ok(!/连接中断/.test(store.getState().message), '不再拿「连接中断」误导排障');
+      assert.match(store.getState().message, /Access denied/);
+      assert.ok(!/Live connection lost/.test(store.getState().message), '不再拿「连接中断」误导排障');
       denied = false; // 用户重新登录后服务端不再拒
       await waitFor(() => store.getState().link === 'live' && store.getState().synced, '放行后下一轮轮询自动恢复');
       assert.ok(store.getState().table.a);
@@ -710,7 +710,7 @@ test('503 未桥接（流与轮询都回）：面板显示原因、不退化为�
     await waitFor(() => stub.hits.stream >= 2, '远程侧重开后再拒');
     await waitFor(() => store.getState().message !== null, '未桥接原因进面板');
     assert.equal(store.getState().link, 'down'); // 横幅位置不变
-    assert.match(store.getState().message, /未允许转发整机数据/);
+    assert.match(store.getState().message, /not allowed forwarding machine-wide data/);
     const snapAtDown = stub.hits.snapshot;
     await sleep(200); // 若还是 pollMs=20 的节奏，这段会攒下 ~10 轮；80ms 节奏只应 2-3 轮
     const pollsDuringDown = stub.hits.snapshot - snapAtDown;
@@ -742,7 +742,7 @@ test('503 未桥接：体读不出 reason 时按 unknown 走「其他」文案�
   try {
     store.start();
     await waitFor(() => store.getState().message !== null, '未桥接原因进面板');
-    assert.match(store.getState().message, /插件桥未桥接，原因：declaration-mismatch/, '非专名 reason 附原文');
+    assert.match(store.getState().message, /plugin bridge unbridged, reason: declaration-mismatch/, '非专名 reason 附原文');
   } finally {
     store.stop();
     await stub.close();
@@ -750,11 +750,11 @@ test('503 未桥接：体读不出 reason 时按 unknown 走「其他」文案�
 });
 
 test('unbridgedMessageOf：四类专名文案 + 其他附 reason 原文', () => {
-  assert.match(unbridgedMessageOf('not-on-server'), /未安装同版本/);
-  assert.match(unbridgedMessageOf('version-mismatch'), /未安装同版本/);
-  assert.match(unbridgedMessageOf('consent-off'), /未允许转发整机数据/);
-  assert.match(unbridgedMessageOf('offline'), /中继离线/);
-  assert.match(unbridgedMessageOf('server-too-old'), /版本过旧/);
+  assert.match(unbridgedMessageOf('not-on-server'), /same version/);
+  assert.match(unbridgedMessageOf('version-mismatch'), /same version/);
+  assert.match(unbridgedMessageOf('consent-off'), /machine-wide data/);
+  assert.match(unbridgedMessageOf('offline'), /relay is offline/);
+  assert.match(unbridgedMessageOf('server-too-old'), /too old/);
   assert.match(unbridgedMessageOf('weird-reason'), /weird-reason/); // 其他：附原文
   assert.match(unbridgedMessageOf('not-shared'), /not-shared/);
 });
@@ -783,7 +783,7 @@ test('侧切换竞态：切侧后旧连接再推的一行不进新侧状态，�
     await sleep(POLL_MS * 3);
     assert.equal(store.getState().table.ghost, undefined, '旧侧的行不得进新侧状态');
     assert.ok(
-      !warnings.some((w) => /实时流连接失败/.test(w)),
+      !warnings.some((w) => /live stream connection failed/.test(w)),
       `旧流被 abort 不该误报「退化为轮询」，却打了：${warnings.join(' | ')}`,
     );
     stub.ctxs.at(-1).send({ type: 'session', session: { id: 'b', repo: '/r', phase: 'running' } });

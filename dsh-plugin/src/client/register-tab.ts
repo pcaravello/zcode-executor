@@ -37,7 +37,7 @@ export function registerTasksTab(ctx: Context, store: SnapshotStore): void {
     } catch (error) {
       // register 抛错只 console 一行、不 rethrow：cordis 会吞掉 fiber 里的异常，rethrow 等于
       // 无声失败；标志也不翻真，与下方 slots.inject 的 rollback 防守同款
-      console.error('[dsh-zcode-executor] sidebarRightTabs.register 抛错，右侧栏「zcode 任务」不挂载', error);
+      console.error('[dsh-zcode-executor] sidebarRightTabs.register threw; the right-sidebar "zcode tasks" tab is not mounted', error);
       return;
     }
     registered = true;

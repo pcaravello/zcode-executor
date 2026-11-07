@@ -100,7 +100,7 @@ export interface SnapshotStore {
 const LINKS: ReadonlyArray<string> = ['starting', 'live', 'down', 'failed'];
 
 /** admit 拒绝（snapshot 回 401/403）时合成的连接说明：传输是通的，病根在鉴权（Task 8 ⑥）。 */
-const AUTH_DENIED_MESSAGE = '无权访问（admit 拒绝）：本机登录态可能已失效，重新登录 DSH 后自动恢复';
+const AUTH_DENIED_MESSAGE = 'Access denied (admit refused): the local sign-in may have expired; sign in to DSH again and it recovers automatically';
 
 /** 子客户端 zen-remote 拦截层回未桥接时的响应标记：503 + 这个响应头（PB-6 协议）。 */
 const UNBRIDGED_HEADER = 'x-zen-remote';
@@ -123,15 +123,15 @@ export function unbridgedMessageOf(reason: string): string {
   switch (reason) {
     case 'not-on-server':
     case 'version-mismatch':
-      return '远程面板暂不可用：主服务端未安装同版本的本插件（两端装同版本后自动恢复）。';
+      return 'Remote pane temporarily unavailable: the main server does not have the same version of this plugin installed (recovers automatically once both ends run the same version).';
     case 'consent-off':
-      return '远程面板暂不可用：主服务端未允许转发整机数据（主服务端主人在 zen-remote 设置里同意后自动恢复）。';
+      return 'Remote pane temporarily unavailable: the main server has not allowed forwarding machine-wide data (recovers automatically after the main server owner consents in the zen-remote settings).';
     case 'offline':
-      return '远程面板暂不可用：中继离线（远程链路恢复后自动重试）。';
+      return 'Remote pane temporarily unavailable: the relay is offline (retries automatically once the remote link recovers).';
     case 'server-too-old':
-      return '远程面板暂不可用：主服务端的 zen-remote 版本过旧（升级服务端后自动恢复）。';
+      return 'Remote pane temporarily unavailable: the main server\'s zen-remote is too old (recovers automatically after upgrading the server).';
     default:
-      return `远程面板暂不可用（插件桥未桥接，原因：${reason}），恢复后自动重试。`;
+      return `Remote pane temporarily unavailable (plugin bridge unbridged, reason: ${reason}); retries automatically once it recovers.`;
   }
 }
 
@@ -161,22 +161,22 @@ export function createSnapshotStore(options: SnapshotStoreOptions): SnapshotStor
   const retryMs = options.retryMs ?? 3000;
   // 0 或负数的间隔会让轮询/重试变成紧密循环打爆服务器，构造时就拒绝
   if (!Number.isFinite(pollMs) || pollMs <= 0) {
-    throw new Error(`createSnapshotStore：pollMs 必须是正的有限数，收到 ${pollMs}`);
+    throw new Error(`createSnapshotStore: pollMs must be a positive finite number, got ${pollMs}`);
   }
   if (!Number.isFinite(retryMs) || retryMs <= 0) {
-    throw new Error(`createSnapshotStore：retryMs 必须是正的有限数，收到 ${retryMs}`);
+    throw new Error(`createSnapshotStore: retryMs must be a positive finite number, got ${retryMs}`);
   }
   const firstResponseMs = options.firstResponseMs ?? 15_000;
   if (!Number.isFinite(firstResponseMs) || firstResponseMs <= 0) {
-    throw new Error(`createSnapshotStore：firstResponseMs 必须是正的有限数，收到 ${firstResponseMs}`);
+    throw new Error(`createSnapshotStore: firstResponseMs must be a positive finite number, got ${firstResponseMs}`);
   }
   const safetyPollMs = options.safetyPollMs ?? 2_000;
   if (!Number.isFinite(safetyPollMs) || safetyPollMs < 0) {
-    throw new Error(`createSnapshotStore：safetyPollMs 必须是非负有限数（0 关闭），收到 ${safetyPollMs}`);
+    throw new Error(`createSnapshotStore: safetyPollMs must be a non-negative finite number (0 disables), got ${safetyPollMs}`);
   }
   const unbridgedRetryMs = options.unbridgedRetryMs ?? 5_000;
   if (!Number.isFinite(unbridgedRetryMs) || unbridgedRetryMs <= 0) {
-    throw new Error(`createSnapshotStore：unbridgedRetryMs 必须是正的有限数，收到 ${unbridgedRetryMs}`);
+    throw new Error(`createSnapshotStore: unbridgedRetryMs must be a positive finite number, got ${unbridgedRetryMs}`);
   }
 
   let state: SnapshotStoreState = { ...emptyState(), link: 'starting', message: null, scopeRepo: null, dataAt: 0 };
@@ -370,8 +370,8 @@ export function createSnapshotStore(options: SnapshotStoreOptions): SnapshotStor
       if (mode === 'safety' && !warnedSafety) {
         warnedSafety = true;
         console.warn(
-          `[zcode-executor] 安全网 snapshot 拉取失败（流仍连着，中途输出可能不刷新）：${
-            alarm.timedOut() ? `${firstResponseMs}ms 没等到响应` : describeError(err)
+          `[zcode-executor] safety-net snapshot fetch failed (stream still connected, interim output may not refresh): ${
+            alarm.timedOut() ? `no response headers within ${firstResponseMs}ms` : describeError(err)
           }`,
         );
       }
@@ -380,8 +380,8 @@ export function createSnapshotStore(options: SnapshotStoreOptions): SnapshotStor
         if (!warnedDegraded) {
           warnedDegraded = true;
           console.warn(
-            `[zcode-executor] snapshot 轮询不可达，连接态转 down：${
-              alarm.timedOut() ? `${firstResponseMs}ms 没等到响应` : describeError(err)
+            `[zcode-executor] snapshot polling unreachable, link degraded to down: ${
+              alarm.timedOut() ? `no response headers within ${firstResponseMs}ms` : describeError(err)
             }`,
           );
         }
@@ -404,7 +404,7 @@ export function createSnapshotStore(options: SnapshotStoreOptions): SnapshotStor
     // 「起不来」比「看不见」更接近病根，覆盖掉会误导排障（Task 8 ⑥）
     if (state.link === 'down' || state.link === 'failed') return;
     const before = state;
-    accept({ type: 'connection', link: 'down', message: '实时连接中断，正在重试' });
+    accept({ type: 'connection', link: 'down', message: 'Live connection lost, retrying' });
     if (state !== before) notify();
   };
 
@@ -477,8 +477,8 @@ export function createSnapshotStore(options: SnapshotStoreOptions): SnapshotStor
       if (!warnedDegraded) {
         warnedDegraded = true;
         console.warn(
-          `[zcode-executor] 实时流连接失败，退化为 snapshot 轮询兜底：${
-            alarm.timedOut() ? `${firstResponseMs}ms 没等到响应` : describeError(err)
+          `[zcode-executor] live stream connection failed, falling back to snapshot polling: ${
+            alarm.timedOut() ? `no response headers within ${firstResponseMs}ms` : describeError(err)
           }`,
         );
       }
