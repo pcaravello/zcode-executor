@@ -67,7 +67,7 @@ const QUESTION_SCRIPT = {
 test('permissionResponse：allow / deny 的形状，其它抛错', () => {
   const withAllow = { options: [{ optionId: 'allow', kind: 'allow_once' }] };
   assert.deepEqual(permissionResponse(withAllow, 'allow'), { decision: 'allow' });
-  assert.deepEqual(permissionResponse({}, 'deny'), { decision: 'deny', reason: '人工拒绝' });
+  assert.deepEqual(permissionResponse({}, 'deny'), { decision: 'deny', reason: 'denied by human' });
   assert.throws(() => permissionResponse({}, 'maybe'), (err) => err?.name === 'ExecutorError');
 });
 
@@ -98,7 +98,7 @@ test('permissionResponse：只有 allow_always 没有 allow_once 时 allow 抛�
   assert.deepEqual(permissionResponse(pending, 'allow'), { decision: 'allow' });
   const alwaysOnly = { options: [{ optionId: 'allow_project', kind: 'allow_always' }, { optionId: 'deny', kind: 'deny' }] };
   assert.throws(() => permissionResponse(alwaysOnly, 'allow'), (err) => err?.name === 'ExecutorError');
-  assert.deepEqual(permissionResponse(alwaysOnly, 'deny'), { decision: 'deny', reason: '人工拒绝' });
+  assert.deepEqual(permissionResponse(alwaysOnly, 'deny'), { decision: 'deny', reason: 'denied by human' });
 });
 
 test('questionResponse：序号、option.value、自由文字三种匹配', () => {
@@ -129,7 +129,7 @@ test('permission 挂起全链路：pending 形状、answer(allow)、回合 done�
     const pending = await waitFor(() => gate.current());
     assert.equal(pending.kind, 'permission');
     assert.equal(pending.stage, 'pending');
-    assert.equal(pending.why, '等人');
+    assert.equal(pending.why, 'waiting for human');
     assert.equal(pending.reason, '列目录'); // T1.2b 第 9 条：reason 字段
     assert.match(pending.at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/); // 带 Z 的 UTC
     assert.equal(pending.toolName, 'Bash');
@@ -157,7 +157,7 @@ test('answer(deny) → mock 收到 {decision:deny, reason:人工拒绝}', async 
     const result = await sendPromise;
     assert.equal(result.outcome, 'done');
     const answers = readRecord(recordPath).filter((m) => m.id !== undefined && m.method === undefined && m.result?.headersApplied === undefined);
-    assert.deepEqual(answers[0].result, { decision: 'deny', reason: '人工拒绝' });
+    assert.deepEqual(answers[0].result, { decision: 'deny', reason: 'denied by human' });
   });
 });
 

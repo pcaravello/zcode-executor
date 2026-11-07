@@ -70,7 +70,7 @@ test('review.enabled:false 即使 --yes 也在 spawn 和付费前拒绝', async 
 
 test('Write 配置 Jev 仅本地 skip，第一笔 ZCode 为快筛、第二笔为慢判', async (t) => {
   const { run, home } = await setup(t, {
-    review: { jev: { apiKey: 'synthetic-jev-key' } }, replies: ['N', '结论: allow'],
+    review: { jev: { apiKey: 'synthetic-jev-key' } }, replies: ['N', 'Conclusion: allow'],
   });
   const result = run(['--yes']);
   assert.equal(result.status, 0, result.stderr);

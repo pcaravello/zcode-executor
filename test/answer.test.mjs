@@ -183,7 +183,7 @@ test('deny：对提问 decline:true → mock 收到 {action:decline, reason:人�
     return answers.some((m) => m.result?.action === 'decline') ? answers : undefined;
   });
   const decline = readRecord(env.recordPath).filter((m) => m.id !== undefined && m.method === undefined).find((m) => m.result?.action === 'decline');
-  assert.equal(decline.result.reason, '人工拒答');
+  assert.equal(decline.result.reason, 'declined by human');
 });
 
 test('answer：两问按顺序对应——单选按序号、多选按 value 逗号分隔', async (t) => {
