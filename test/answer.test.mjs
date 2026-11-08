@@ -520,7 +520,7 @@ test('挂起时 approve 与 cancel 并发 → eventType executor.deny、人读�
   process.kill(second.pid, 'SIGCONT');
   const code2 = await new Promise((resolve) => approveHuman.on('close', (c) => resolve(c)));
   assert.equal(code2, 0, humanOut);
-  assert.match(humanOut, /被 deny\/cancel 取代/);
+  assert.match(humanOut, /superseded by deny\/cancel/);
   await waitFor(async () => (existsSync(path.join(second.env.runsDir, 'lock')) ? undefined : true), { timeoutMs: 20000 });
 });
 
