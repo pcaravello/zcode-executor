@@ -178,13 +178,41 @@ test('credentials：缺 oauth:active_provider 返回 {error}', async () => {
   assert.match(out.error, /active_provider/);
 });
 
-test('credentials：user_info 缺 id 返回 {error}', async () => {
+test('credentials：user_info 缺 id → 从 plan key 键名反推账号 id（ZCode 0.17，StreamEmbedder 补丁）', async () => {
   const entries = fullEntries();
   entries['oauth:bigmodel:user_info'] = JSON.stringify({ username: 'no-id-here' });
   const file = await writeCredentials(entries);
   const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
+  assert.deepEqual(Object.keys(out).sort(), ['accountId', 'family', 'plans']);
+  assert.equal(out.family, 'bigmodel');
+  assert.equal(out.accountId, ACCOUNT_ID);
+  assert.equal(out.plans.individual, entries['account-provider:coding-plan:account:bigmodel-individual-coding-plan:account:10086:api-key']);
+  assert.equal(out.plans.team, entries['account-provider:coding-plan:account:bigmodel-team-coding-plan:account:10086:api-key']);
+});
+
+test('credentials：user_info 缺 id 且键名推不出来（连 plan key 都没有）→ 返回 {error}', async () => {
+  const entries = fullEntries();
+  entries['oauth:bigmodel:user_info'] = JSON.stringify({ username: 'no-id-here' });
+  for (const k of Object.keys(entries)) {
+    if (k.includes('coding-plan:account:')) delete entries[k];
+  }
+  const file = await writeCredentials(entries);
+  const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.ok(out?.error);
   assert.match(out.error, /id/);
+});
+
+test('credentials：user_info 缺 id、某把 plan 的候选键名不唯一 → 该把被跳过，不瞎选', async () => {
+  const entries = fullEntries();
+  entries['oauth:bigmodel:user_info'] = JSON.stringify({ username: 'no-id-here' });
+  // individual 出现两个不同 id 的候选键：不是恰好一个就不碰它；team 只有一个照常推
+  entries['account-provider:coding-plan:account:bigmodel-individual-coding-plan:account:99999:api-key'] = individualKey();
+  const file = await writeCredentials(entries);
+  const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
+  assert.deepEqual(Object.keys(out).sort(), ['accountId', 'family', 'plans']);
+  assert.equal(out.accountId, ACCOUNT_ID); // id 来自 team 那把键名
+  assert.equal(out.plans.individual, undefined);
+  assert.equal(out.plans.team, entries['account-provider:coding-plan:account:bigmodel-team-coding-plan:account:10086:api-key']);
 });
 
 test('credentials：四个键齐全 → family/accountId/plans 两把 key 都在，别的键不碰', async () => {
