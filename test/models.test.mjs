@@ -97,7 +97,7 @@ test('resolveModels：形状齐全，providerId 优先于 config.preferredProvid
   assert.equal('current' in resolved, false); // 3.12 没有 readState 了，current 不再有
   // T6-C：没写 credentials.json 夹具时账号型来源记一条「不存在」的提醒（未登录不是错误）
   assert.equal(resolved.warnings.length, 1);
-  assert.match(resolved.warnings[0], /credentials\.json 不存在/);
+  assert.match(resolved.warnings[0], /credentials.json does not exist/);
   assert.equal(resolved.registry.providers.length, 2);
   assert.deepEqual(readRecord(recordPath), []); // 不握手：mock 根本没被起过
 });
@@ -117,7 +117,7 @@ test('resolveModels：配置 tiers 指到不存在的模型 → warnings 提醒�
 test('resolveModels：preferredProvider 不在表里 → warnings 有回落提醒', async () => {
   const { resolved } = await runResolve({ config: { preferredProvider: 'no-such-plan', tiers: {} } });
   assert.equal(resolved.provider.providerId, 'builtin:bigmodel-coding-plan'); // 回落到 D6 优先级
-  assert.ok(resolved.warnings.some((w) => /no-such-plan/.test(w) && /回落/.test(w)), resolved.warnings.join('；'));
+  assert.ok(resolved.warnings.some((w) => /no-such-plan/.test(w) && /fell back/.test(w)), resolved.warnings.join('；'));
 });
 
 test('resolveModels：handshake:true 零 token——只有 deferred 的 create 与 close，create 用 fast 档 + 默认档位，个人文件收场即删', async () => {
@@ -131,7 +131,7 @@ test('resolveModels：handshake:true 零 token——只有 deferred 的 create �
   assert.equal(create.thoughtLevel, 'high'); // 顶层也带（真机只给 options 时 thoughtLevel.current 是空的）
   // 个人文件里的两个模型 app-server 都认了；剩下一条是账号型来源未登录的提醒
   assert.equal(resolved.warnings.length, 1);
-  assert.match(resolved.warnings[0], /credentials\.json 不存在/);
+  assert.match(resolved.warnings[0], /credentials.json does not exist/);
   assert.deepEqual(await readdir(tmp), []); // 个人 provider 文件（含 apiKey）已随目录删掉
 });
 
@@ -141,7 +141,7 @@ test('resolveModels：握手回来的可用模型缺了个人文件里的 → wa
     handshake: true,
     script: { models: [{ ref: { providerId: 'zcode-executor', modelId: 'GLM-5.3-Flash' }, reasoning: { levels: [{ value: 'high' }] } }] },
   });
-  assert.ok(resolved.warnings.some((w) => /GLM-5\.3 没被 app-server 认/.test(w)), resolved.warnings.join('；'));
+  assert.ok(resolved.warnings.some((w) => /GLM-5\.3.*not accepted by app-server/.test(w)), resolved.warnings.join('；'));
 });
 
 test('resolveModels：握手失败（create 被拒）→ 抛错且个人文件照样删掉', async () => {
@@ -167,7 +167,7 @@ test('resolveModels：选中的 provider 没有明文 apiKey → 不握手照常
   await withTmpdir(() =>
     assert.rejects(
       resolveModels({ config: {}, configPath, handshake: true, zcodePath: mock.zcodePath, env: mock.env }),
-      /没有明文 apiKey/,
+      /no plaintext apiKey/,
     ),
   );
   assert.deepEqual(readRecord(mock.env.MOCK_APPSERVER_RECORD), []); // 没 key 连 spawn 都不该有
@@ -215,7 +215,7 @@ test('resolveReviewSelection：fast 档 + review.thought（默认 low）→ sele
   assert.equal(byDefault.model.ref.providerId, providerId); // model 条目仍认 config.json 的 id
   const overridden = resolveReviewSelection({ registry, providerId, config: { review: { model: 'GLM-5.3', thought: 'max' } } });
   assert.deepEqual(overridden.selection, { providerId: 'zcode-executor', modelId: 'GLM-5.3', options: { reasoningLevel: 'max' } });
-  assert.throws(() => resolveReviewSelection({ registry, providerId: 'no-such', config: {} }), /不在 provider 表里/);
+  assert.throws(() => resolveReviewSelection({ registry, providerId: 'no-such', config: {} }), /not in the provider table/);
   assert.throws(() => resolveReviewSelection({ registry, providerId, config: { review: { model: 'nope' } } }), /nope/);
 });
 
@@ -241,7 +241,7 @@ test('resolveModels：只有 credentials.json、没有 config.json → 选中 ac
   assert.equal(resolved.strong.ref.modelId, 'GLM-5.3');
   // legacy config.json 不存在只提醒，不再拦着（账号型来源可用）
   assert.equal(resolved.warnings.length, 1);
-  assert.match(resolved.warnings[0], /找不到 zcode 配置/);
+  assert.match(resolved.warnings[0], /zcode config not found/);
   // registry 里两把账号型 key 都进 secrets 抹除名单（resolveModels 内部收集，这里验表里有值）
   assert.equal(resolved.registry.providers.filter((p) => p.apiKey?.value).length, 2);
 });

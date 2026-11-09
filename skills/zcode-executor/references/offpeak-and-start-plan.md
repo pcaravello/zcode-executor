@@ -1,83 +1,82 @@
-# 闲时投递与 start plan 投递（zcode-executor 详细参考）
+# Off-peak sends and start-plan sends (zcode-executor detailed reference)
 
-正文见 SKILL.md「闲时投递」一节的入口指针；以下是完整细节，涉及这两种投递方式时再读。
+SKILL.md's "off-peak sends" section holds the entry pointer; the full details follow. Read this whenever either send type is involved.
 
-## 闲时投递
+## Off-peak sends
 
-闲时投递用 Coding Plan 订阅的免费闲时算力跑回合，不占套餐额度；代价是先取号排队，开跑时间由服务器决定，没法预估。
-验收、返工、挂起照普通投递。旧版本没有这个功能：`send` 报「不认识的参数 --offpeak」就改用普通投递。
+An off-peak send runs the turn on the Coding Plan subscription's free off-peak capacity, using no plan quota; the price is taking a ticket and queueing first, with the start time decided by the server and impossible to predict.
+Acceptance, rework, and pending items work exactly like a normal send. Older versions lack this feature: if `send` reports `unknown flag --offpeak`, fall back to a normal send.
 
-**什么时候用**：派单默认普通投递；走不走闲时由用户知情后决定。
+**When to use it**: dispatching defaults to normal sends; whether to go off-peak is the user's informed choice.
 
-- 每个对话第一次派单前跑一次 `zcode-executor quota`（零额度，不取号），用一句话告诉用户：这次按普通投递；
-  也可以改走闲时投递（Coding Plan 订阅的免费算力，开跑时间由服务器决定、没法预估），今天本工具已用 N 次
-  （每天约 3 次，App 里用的不计入），现在能不能取（不能取时给出可再取的时间）。
-- 说完**直接按普通投递继续，不停下来等回答**。用户回复要走闲时：已经发出的普通投递不改；之后的新任务照「怎么用」
-  另开会话发 `--offpeak`，返工在原会话等上一次投递结束后再发 `--offpeak`。
-- 用户明确选了闲时才发 `--offpeak`。返工同样默认普通投递，闲时只作为选项提。
-- `quota` 的结论不是「正常」时：
-  - 「不适用」（没登录、团队版）：这个对话里不用再提闲时选项；
-  - 输出里是「接口变了」（退出码 1）：照下面表里「闲时接口可能变了」那一行处理；
-  - 其他退出码 1（原因在 stderr，比如旧版本不认识 quota 命令）或「暂时不可用」：对用户说一句「闲时情况暂时查不到」，照常普通投递。
-- 同一对话里后面派单不再跑 `quota`、也不再提闲时；只有用户问起闲时，或者准备发 `--offpeak` 之前，才再跑一次。
+- Before the first dispatch in each conversation, run `zcode-executor quota` once (zero quota, takes no ticket) and tell the user in one sentence: this one goes as a normal send;
+  it could also go as an off-peak send (the Coding Plan subscription's free capacity; the start time is decided by the server and cannot be predicted); this tool has already used N today
+  (about 3 a day; App usage does not count toward it), and whether a ticket can be taken right now (if not, give the earliest retry time).
+- After saying that, **continue straight into the normal send; do not stop and wait for an answer**. If the user replies that they want off-peak: normal sends already dispatched are left unchanged; for later new tasks, follow "How to use it" —
+  open another session and send `--offpeak`; for rework in the original session, wait for the previous send to finish, then send `--offpeak`.
+- Send `--offpeak` only after the user explicitly chooses off-peak. Rework also defaults to a normal send; off-peak is only ever offered as an option.
+- When `quota`'s verdict is not "ok":
+  - "not applicable" (not signed in, team plan): do not raise the off-peak option again in this conversation;
+  - the output says the interface changed (exit code 1): handle it per the "the off-peak API may have changed" row in the table below;
+  - any other exit code 1 (the reason is on stderr, e.g. an old version that does not know the quota command) or "temporarily unavailable": tell the user "off-peak status cannot be checked right now" and send normally as usual.
+- Later dispatches in the same conversation skip `quota` and skip mentioning off-peak; run it again only when the user asks about off-peak, or right before sending `--offpeak`.
 
-**怎么用**：闲时投递要求会话空闲（没有 runner、队列为空）。新任务另开一条会话、配自己的执行副本专门发；
-返工时上一次投递已经结束，直接在原会话 `send <id> … --offpeak`，保留上下文。一个执行副本只配一条会话。
+**How to use it**: an off-peak send requires an idle session (no runner, empty queue). For a new task, open a dedicated session with its own worktree;
+for rework the previous send has already finished, so just send `send <id> … --offpeak` in the original session, keeping the context. One worktree pairs with exactly one session.
 
 ```bash
-WT2=~/.zcode-executor/worktrees/<仓库名>-offpeak
-git -C <主仓绝对路径> worktree add "$WT2" -b task/T-xxx     # 任务单放进 $WT2
+WT2=~/.zcode-executor/worktrees/<repo-name>-offpeak
+git -C <main-repo-abs-path> worktree add "$WT2" -b task/T-xxx     # put the task file inside $WT2
 zcode-executor new --cwd "$WT2" --title T-xxx-offpeak --tier fast --json
-zcode-executor send <id> "执行 tasks/T-xxx.md" --task "$WT2/tasks/T-xxx.md" --offpeak   # 取号后立刻返回「已取号，排第 N 位」
-zcode-executor status <id>    # 看排位、运行中还是已结束
+zcode-executor send <id> "execute tasks/T-xxx.md" --task "$WT2/tasks/T-xxx.md" --offpeak   # returns immediately: "ticket taken, queued at position N"
+zcode-executor status <id>    # shows the queue position, and whether it is running or finished
 ```
 
-- 取号后立刻返回，排号可能很久：要等结果就用后台任务（`run_in_background`）起 `follow`，发闲时投递时不带 `--wait`。
-- 免费取号每天约 3 次、本地零点重置（2026-09-28 实测），一次闲时投递最坏会用掉 3 个；别为试探而反复取号。
-- 回合 `--timeout`（默认 3600 秒）从开跑算起、挂起时间也算：闲时回合要等人审批的，给宽一点的 `--timeout`。
-- 号过期或失效由 runner 自动重取，最多 3 个号，用完以退出码 4 结束。以退出码 4 结束时先 `status <id>`：
-  有「闲时：投递 … 没收尾」那一行就用 `--resume`（见下），没有就照普通回合异常处理，改动留在执行副本里。
-- 挂起：由你尽快应答（见 SKILL.md「退出码 5」一节），闲时回合同样可能要审批。号开跑后最长跑 3 小时；挂起久了会不会让号失效还没验证过。
-- `--steer` 只在回合开跑后能用。排号期间 `cancel` 再重投会重新取号、重新排队，还占一次免费取号次数；方向小改就等开跑后 `--steer`。
+- The send returns immediately after taking the ticket, and the queue wait can be long: to wait for the result, start `follow` as a background task (`run_in_background`) and do not pass `--wait` with the off-peak send.
+- Free tickets: about 3 a day, reset at local midnight (measured 2026-09-28); one off-peak send can burn through all 3 at worst; do not take tickets repeatedly just to probe.
+- The turn `--timeout` (default 3600 seconds) starts when the turn starts and includes pending time: for an off-peak turn that will wait for human review, give a wider `--timeout`.
+- An expired or invalidated ticket is retaken automatically by the runner, at most 3 tickets; exhausting them ends with exit code 4. On exit code 4, run `status <id>` first:
+  if the "off-peak: send … not settled, runner is gone" line is there, use `--resume` (below); if not, treat it like any failed turn, with the changes left in the worktree.
+- Pending: answer as soon as you can (see SKILL.md's "exit code 5" section); an off-peak turn can also require review. A ticket runs at most 3 hours after starting; whether a long pending spell invalidates the ticket is unverified.
+- `--steer` works only once the turn has started. `cancel` followed by a resend while still queued takes a new ticket and queues again, consuming one of the free takes; for small direction changes, wait for the turn to start and `--steer`.
 
-**退出码 2：取号前或取号时被拒**，按报错原因处理：
+**Exit code 2: refused before or while taking a ticket**, handle it by the error's cause:
 
-| 报错说的 | 你该做什么 |
+| What the error says | What you should do |
 | --- | --- |
-| 会话不空闲，刚 `cancel` 过 | 等几秒，`status` 显示不再有 runner 后重投同一会话 |
-| 会话不空闲，有普通投递在跑 | 等它结束；或另建一个执行副本再 `new` 一条会话 |
-| 模型不在闲时模型表里（报错列出了表） | 用 `zcode-executor models` 看哪个等级分到的是表里的模型，用那个 `--tier` `new` 一条 |
-| 没登录、团队版暂不支持、没有闲时资格 | 告诉用户：闲时要在 ZCode App 里登录个人版 Coding Plan 订阅账号 |
-| 额度用完，<时间> 以后可再取 | 把这个时间告诉用户；急的活改普通投递 |
-| 闲时服务暂时不可用、连不上闲时服务 | 过一会儿再投，或改普通投递 |
-| 闲时接口可能变了 | 跑 `zcode-executor doctor --offpeak`，把结论转告用户，这次改普通投递 |
-| 投递 … 没收尾，runner 已不在 | 见下面「出事了怎么办」 |
+| `an off-peak send requires an idle session (no running runner and an empty queue)…` — right after a `cancel` | Wait a few seconds, then resend to the same session once `status` shows no runner |
+| `an off-peak send requires an idle session (no running runner and an empty queue)…` — a normal send is running | Wait for it to finish; or open another worktree and `new` a separate session |
+| `the session's model <modelId> is not in the off-peak model list (…)` (the error lists the list) | Run `zcode-executor models` to see which tier currently gets a listed model, then `new` a session with that `--tier` |
+| `off-peak send is unavailable: …` (not signed in, team plan, no off-peak eligibility) | Tell the user: off-peak requires signing in with an individual Coding Plan subscription account in the ZCode App |
+| `off-peak quota is used up; you can take a ticket again after <time>` | Tell the user that time; switch urgent work to a normal send |
+| `…temporarily unavailable (HTTP …); try again later` / `cannot reach the off-peak server (…)` | Send again later, or use a normal send |
+| `…the off-peak API may have changed; run zcode-executor doctor --offpeak to check` | Run `zcode-executor doctor --offpeak`, relay the verdict to the user, and use a normal send this time |
+| `send … not settled, runner is gone` | See "When something goes wrong" below |
 
-**出事了怎么办**：以 `status` 里「闲时：投递 … 没收尾，runner 已不在」那一行为准；phase 是 `exited` 本身只是正常收工，不用恢复。
+**When something goes wrong**: go by the "off-peak: send … not settled, runner is gone" line in `status`; phase `exited` by itself is just a normal wrap-up, nothing to recover.
 
-- 有那一行（回合 exited 或 runner 没了）→ `zcode-executor send <id> --offpeak --resume`。
-  它只重新拉起 runner 接着跑那次投递，不重新取号，不带正文和 `--task`。
-- 不想要了 → `zcode-executor cancel <id>`，任何阶段都会自动结算号。
-- `status` 里出现「闲时：号 … 未结算」→ 把号告诉用户，说明服务器那边这几个号没结算成功。
+- That line is present (turn exited or runner gone) → `zcode-executor send <id> --offpeak --resume`.
+  It only restarts the runner to continue that send — no new ticket, no body, no `--task`.
+- You no longer want it → `zcode-executor cancel <id>`; the ticket is settled automatically at any stage.
+- `status` shows "off-peak: ticket … not settled" → tell the user the ticket ids; those tickets failed to settle on the server side.
 
-**健康检查**：`zcode-executor doctor --offpeak` 只查闲时接口，不花额度（会联网，起一个假号回合）。
-只有退出码 1「接口变了」要处理：原因在 stderr，告诉用户闲时这条路暂时断了，派活改普通投递。「暂时不可用」「不适用」退出码 0，把那一行转告用户即可。
+**Health check**: `zcode-executor doctor --offpeak` checks only the off-peak interface and spends no quota (it goes online and runs a fake-ticket turn).
+Only exit code 1 ("the interface changed") needs action: the reason is on stderr — tell the user the off-peak route is temporarily broken and dispatch with normal sends. "Temporarily unavailable" and "not applicable" exit 0; just relay that line to the user.
 
-用户想定期查，建议他挂在自己的 cron 上（本工具不自动跑）。cron 的 PATH 很短，node 与脚本都写绝对路径；
-stdout 总有一行结论，丢掉，只看退出码与 stderr：
+If the user wants a periodic check, suggest hanging it on their own cron (this tool never runs it by itself). A cron PATH is short; use absolute paths for node and the script;
+stdout always carries one verdict line — throw it away and judge only by the exit code and stderr:
 
 ```cron
-0 9 * * * /绝对路径/node /绝对路径/bin/zcode-executor doctor --offpeak >/dev/null
+0 9 * * * /abs/path/to/node /abs/path/to/bin/zcode-executor doctor --offpeak >/dev/null
 ```
 
-App 版本和验证过的版本不同时，stderr 每次多一行提示；每跑一次在 zcode 命令行的会话库里留一条 App 看不到的自检会话，所以频率别太高（一天一次够了）。
+When the App version differs from the verified version, stderr adds one extra line each run; every run also leaves one self-check session in the zcode CLI's session store that the App cannot see, so do not run it too often (once a day is enough).
 
-## start plan 投递
+## start-plan sends
 
-Start Plan 是 ZCode App 里的另一档订阅。`send <id> <正文> --start-plan` 让**这一回合**吃 Start Plan 额度，
-其余与普通投递完全一样：立刻开跑、没有号、不独占会话、验收照旧。`--offpeak` 与 `--start-plan` 互斥，
-`--steer` 不能插进 start plan 投递（它是一次新投递）。（2026-09-29 曾因阿里云验证码在无头宿主上不可用，
-2026-10-09 服务器撤下验证后恢复。）
+Start Plan is another subscription tier inside the ZCode App. `send <id> <text> --start-plan` bills **this turn** to Start Plan quota;
+everything else is exactly like a normal send: starts immediately, no ticket, does not monopolize the session, acceptance unchanged. `--offpeak` and `--start-plan` are mutually exclusive,
+and `--steer` cannot steer into a start-plan send (it is a new send). (It was unavailable on headless hosts from 2026-09-29 because of an Aliyun captcha, and was restored on 2026-10-09 after the server dropped the check.)
 
-- 模型表以 ZCode App 的内置配置为准（被拒时退出码 2，报错会列出表）；会话模型不在表里就换 `--tier` 新建会话。
-- 同一会话可以混用：有的投递带 `--start-plan`、有的不带，互不影响；失败也不影响后续普通投递。
+- The model list follows the ZCode App's builtin configuration (a refusal exits 2 and the error lists the list); if the session's model is not on it, create a new session with a different `--tier`.
+- One session may mix both: some sends with `--start-plan`, some without; they do not interfere, and a failed start-plan send does not affect later normal sends.

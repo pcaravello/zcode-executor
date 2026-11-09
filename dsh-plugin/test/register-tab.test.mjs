@@ -39,5 +39,5 @@ test('到点未注册的说明行：已注册给 null，未注册给一行说明
   assert.equal(missingServiceNote(true), null);
   const note = missingServiceNote(false);
   assert.match(note, /sidebarRightTabs/);
-  assert.match(note, /不挂载/);
+  assert.match(note, /not mounted/);
 });

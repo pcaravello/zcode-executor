@@ -127,7 +127,7 @@ test('settleTurn：resultType cancelled → outcome cancelled，reason 说明被
   const settled = settleTurn([{ type: 'turn.completed', payload: { resultType: 'cancelled', usage: { totalTokens: 0 } } }]);
   assert.deepEqual(settled, {
     outcome: 'cancelled',
-    reason: '回合被叫停（resultType=cancelled）',
+    reason: 'Turn was stopped (resultType=cancelled)',
     lastText: '',
     lastMessageText: '',
     usage: { totalTokens: 0 },
@@ -203,7 +203,7 @@ test('剧本开 runtimeHeaders 且 spawn 没给 providerAuth → 回合在模型
     const session = await attachSession({ client, sessionId: SESSION_ID, cwd: mock.dir, eventsPath: path.join(mock.dir, 'events.jsonl') });
     const result = await session.send('hi');
     assert.equal(result.outcome, 'failed');
-    assert.equal(result.reason, 'zcode-executor 没有 provider zcode-executor 的 API key，模型请求发不出去');
+    assert.equal(result.reason, 'zcode-executor has no API key for provider zcode-executor; the model request cannot be sent');
     assert.equal(result.lastText, '');
   } finally {
     await client.close({ timeoutMs: 2000 }).catch(() => {});
@@ -249,7 +249,7 @@ test('hang + timeoutMs → outcome timeout，mock 记录里的 session/stop 带 
     const startedAt = Date.now();
     const result = await session.send('hi', { timeoutMs: 300 });
     assert.equal(result.outcome, 'timeout');
-    assert.match(result.reason, /超时/);
+    assert.match(result.reason, /timed out/);
     // 宽限期最多 5 秒（任务单定死），总耗时应略高于 300ms + 5s，不能无限等
     assert.ok(Date.now() - startedAt < 8000);
     const record = readRecord(recordPath);
@@ -373,7 +373,7 @@ test('空闲时 steer → 抛 ExecutorError（delivery=startNow），自动发 v
     const eventsPath = path.join(mock.dir, 'nested', 'events.jsonl');
     const session = await attachSession({ client, sessionId: created.session.sessionId, cwd: mock.dir, eventsPath, resume: false });
     await assert.rejects(session.steer('插一句'), (err) => {
-      assert.match(err.message, /插话到达时回合已结束/);
+      assert.match(err.message, /The steer arrived after the turn had ended/);
       assert.match(err.message, /v4 stop/);
       assert.equal(err.details.delivery, 'startNow');
       assert.equal(typeof err.details.commandId, 'string');
@@ -455,7 +455,7 @@ test('handlers.permission：收到 params（toolName/input/options），应答�
       handlers: {
         permission: async (params) => {
           seen.push(params);
-          return { decision: 'allow', reason: '放行' };
+          return { decision: 'allow', reason: 'approved' };
         },
       },
     },
@@ -469,7 +469,7 @@ test('handlers.permission：收到 params（toolName/input/options），应答�
       assert.ok(seen[0].options.some((o) => o.kind === 'allow_once'));
       const record = readRecord(recordPath);
       const answers = record.filter((m) => m.id !== undefined && m.method === undefined && m.result?.headersApplied === undefined);
-      assert.deepEqual(answers[0].result, { decision: 'allow', reason: '放行' });
+      assert.deepEqual(answers[0].result, { decision: 'allow', reason: 'approved' });
     },
   );
 });
@@ -485,14 +485,14 @@ test('下一回合复用了上一回合的 requestId：审批处理器照样再�
         permission: async (params) => {
           seen.push(params.input.command);
           // 第一回合放行；第二回合同一个 requestId、换了命令，这次不放
-          return seen.length === 1 ? { decision: 'allow' } : { decision: 'deny', reason: '人工拒绝' };
+          return seen.length === 1 ? { decision: 'allow' } : { decision: 'deny', reason: 'denied by human' };
         },
       },
     },
     async ({ session, recordPath }) => {
       assert.equal((await session.send('第一回合')).outcome, 'done');
       assert.equal((await session.send('第二回合')).outcome, 'done');
-      assert.deepEqual(seen, ['ls', 'rm -rf ~'], '第二回合的审批必须重新过处理器');
+      assert.deepEqual(seen, ['ls', 'rm -rf ~'], 'the second turn\'s permission must go through the handler again');
       const answers = readRecord(recordPath)
         .filter((m) => m.id !== undefined && m.method === undefined && m.result?.decision !== undefined)
         .map((m) => m.result.decision);
@@ -620,7 +620,7 @@ test('send 超时 → stop 请求 → mock 推 cancelled → 对外仍报 timeou
     // 只要本次 send 触发过超时，宽限内不管等到什么结束事件对外都是 timeout（退出码 3：再投一次接着做），
     // 4 的「回合异常」和 3 的「取消后重投」用户处理方式不同，不能丢掉「是超时」这个事实
     assert.equal(result.outcome, 'timeout');
-    assert.match(result.reason, /已发 session\/stop/);
+    assert.match(result.reason, /session\/stop sent/);
     const elapsed = Date.now() - startedAt;
     assert.ok(elapsed >= 300 && elapsed < 5000); // cancelled 一到就返回，不等满 5 秒宽限
     // 但 stop 是真的生效了：带 id 的请求发出去了，mock 也以 resultType=cancelled 收掉了回合

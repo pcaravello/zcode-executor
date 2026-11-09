@@ -129,7 +129,7 @@ test('闲时客户端：origin 只接受 https 或本机回环的 http，否则�
     assert.throws(() => createOffPeakClient({ origin, auth: AUTH }), (err) => {
       assert.ok(err instanceof ExecutorError, origin);
       assert.equal(err.exitCode, 1, origin);
-      assert.match(err.message, /https|本机/, origin);
+      assert.match(err.message, /https|loopback/, origin);
       return true;
     }, origin);
   }
@@ -187,7 +187,7 @@ test('闲时客户端：连不上服务器 → unavailable', async () => {
   const err = await rejection(client.take('offpeak-task-x'));
   assert.equal(err.details.kind, 'unavailable');
   assert.equal(err.details.step, 'take');
-  assert.match(err.message, /取号/);
+  assert.match(err.message, /ticket take/);
 });
 
 test('闲时客户端：服务器超时不答 → unavailable', async () => {
@@ -195,8 +195,8 @@ test('闲时客户端：服务器超时不答 → unavailable', async () => {
   const client = createOffPeakClient({ origin: m.origin, auth: AUTH, timeoutMs: 50 });
   const err = await rejection(client.status(['1']));
   assert.equal(err.details.kind, 'unavailable');
-  assert.match(err.message, /查排位/);
-  assert.match(err.message, /超时/);
+  assert.match(err.message, /ticket status/);
+  assert.match(err.message, /timed out/);
 });
 
 test('闲时客户端：HTTP 5xx → unavailable，带 HTTP 状态与 logid', async () => {
@@ -206,7 +206,7 @@ test('闲时客户端：HTTP 5xx → unavailable，带 HTTP 状态与 logid', as
   assert.equal(err.details.kind, 'unavailable');
   assert.equal(err.details.httpStatus, 502);
   assert.equal(err.details.logid, 'log-502');
-  assert.match(err.message, /结算/);
+  assert.match(err.message, /settle/);
 });
 
 test('闲时客户端：业务码 3101 → not-applicable，说要 Coding Plan 订阅', async () => {
@@ -319,8 +319,8 @@ test('闲时客户端：JWT 失效（HTTP 401）→ not-applicable，提示在 Z
   const err = await rejection(client.availability());
   assert.equal(err.details.kind, 'not-applicable');
   assert.equal(err.details.httpStatus, 401);
-  assert.match(err.message, /重新登录/);
-  assert.match(err.message, /查资格/);
+  assert.match(err.message, /sign in to the ZCode App/);
+  assert.match(err.message, /availability check/);
 });
 
 test('闲时客户端：HTTP 404 → changed，提示跑 doctor --offpeak', async () => {

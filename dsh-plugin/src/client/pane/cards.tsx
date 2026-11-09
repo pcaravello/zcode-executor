@@ -47,11 +47,11 @@ export function endClockOf(iso: string | null | undefined): string | null {
 
 /** 结果 → 图标键：与 outcomeOf 的文案一一对应，认不出的按已退出画。 */
 function outcomeIconOf(outcome: Outcome): StatusIconKey {
-  if (outcome.label === '已完成') return 'done';
-  if (outcome.label === '已超时') return 'timeout';
-  if (outcome.label === '执行失败') return 'fail';
-  if (outcome.label === '已取消') return 'cancel';
-  if (outcome.label === '空闲') return 'idle';
+  if (outcome.label === 'done') return 'done';
+  if (outcome.label === 'timed out') return 'timeout';
+  if (outcome.label === 'failed') return 'fail';
+  if (outcome.label === 'cancelled') return 'cancel';
+  if (outcome.label === 'idle') return 'idle';
   return 'exited';
 }
 
@@ -60,8 +60,8 @@ function outcomeAttrOf(outcome: Outcome): 'done' | 'timeout' | 'failed' | 'cance
   if (outcome.color === 'success') return 'done';
   if (outcome.color === 'warning') return 'timeout';
   if (outcome.color === 'error') return 'failed';
-  if (outcome.label === '空闲') return 'idle';
-  if (outcome.label === '已取消') return 'cancel';
+  if (outcome.label === 'idle') return 'idle';
+  if (outcome.label === 'cancelled') return 'cancel';
   return 'exited';
 }
 
@@ -70,8 +70,8 @@ function outcomeAttrOf(outcome: Outcome): 'done' | 'timeout' | 'failed' | 'cance
 /** 宿主 MarkdownText 的探测结果与固定文案：模块加载时探测一次，labels 引用稳定（官方要求）。 */
 const HOST_MARKDOWN = pickMarkdownText(hostModules());
 const MARKDOWN_LABELS = {
-  code: { copyLabel: '复制', copiedLabel: '已复制' },
-  footnotes: '脚注',
+  code: { copyLabel: 'Copy', copiedLabel: 'Copied' },
+  footnotes: 'Footnotes',
 } as const;
 
 /** 行内记号的最小切分：反引号代码与加粗，其余原样。 */
@@ -237,7 +237,7 @@ export function ReplyView(props: { s: SessionSnapshot }): ReactElement | null {
         <MarkdownBody text={markdown} />
       </div>
       <button className="zxe-fold" type="button" onClick={() => setOpen(!open)}>
-        {open ? '收起' : '展开回复'}
+        {open ? 'Collapse' : 'Expand reply'}
       </button>
     </div>
   );
@@ -252,7 +252,7 @@ function ToolRow(props: { tool: ToolCall; active: boolean }): ReactElement {
   return (
     <div className={cls}>
       <span className="zxe-g">{props.active ? '▸' : bad ? '✕' : '✓'}</span>
-      <span className="zxe-tn">{props.tool.toolName ?? '未知工具'}</span>
+      <span className="zxe-tn">{props.tool.toolName ?? 'unknown tool'}</span>
       {typeof props.tool.summary === 'string' && props.tool.summary !== '' ? (
         <span className="zxe-ts zxe-mono">{props.tool.summary}</span>
       ) : null}
@@ -315,11 +315,11 @@ export function PendingCard(props: CardProps): ReactElement {
       {body !== '' ? (
         <div className="zxe-pend-body">
           <pre className="zxe-mono">{body}</pre>
-          {reason !== null ? <div className="zxe-reason">原因：{reason}</div> : null}
+          {reason !== null ? <div className="zxe-reason">Reason: {reason}</div> : null}
         </div>
       ) : null}
       <ReplyView s={s} />
-      <div className="zxe-hint">由派单智能体在对话中处理</div>
+      <div className="zxe-hint">Handled by the dispatch agent in the conversation</div>
     </article>
   );
 }
@@ -337,7 +337,7 @@ export function StaleCard(props: CardProps): ReactElement {
       />
       <div className="zxe-meta">{metaOf(s)}</div>
       <ReplyView s={s} />
-      <div className="zxe-hint">回合没有正常收尾；重投或取消由派单智能体在对话里处理</div>
+      <div className="zxe-hint">The turn did not end cleanly; resending or cancelling is handled by the dispatch agent in the conversation</div>
     </article>
   );
 }
@@ -351,7 +351,7 @@ export function QueueCard(props: CardProps): ReactElement {
     <article className="zxe-card zxe-k-queue">
       <CardHead icon={<QueueIcon size={16} />} label={head.label} corner={cornerOf(s, now)} />
       <div className="zxe-meta">
-        {[s.id, s.task, queued ? '等服务器放出闲时算力' : ''].filter((part) => typeof part === 'string' && part !== '').join(' · ')}
+        {[s.id, s.task, queued ? 'waiting for the server to release off-peak capacity' : ''].filter((part) => typeof part === 'string' && part !== '').join(' · ')}
         <span className="zxe-repotag">{s.repo ? ` · ${repoNameOf(s.repo)}` : ''}</span>
       </div>
     </article>
@@ -394,7 +394,7 @@ export function RecentCard(props: CardProps & { onCollapse?: (() => void) | unde
       <ReplyView s={s} />
       {onCollapse !== undefined ? (
         <button className="zxe-fold" type="button" onClick={onCollapse}>
-          收起
+          Collapse
         </button>
       ) : null}
     </article>

@@ -42,7 +42,7 @@ test('status 排号中：多一行「闲时：排第 N 位（号 …，第 k/3 �
   const r = await queuedOffPeak(s);
   const human = await runBin(s.env, ['status', s.entry.id]);
   assert.equal(human.status, 0, human.stderr);
-  assert.match(human.stdout, /^ {2}闲时：排第 1 位（号 mock-ticket-1，第 1\/3 个号）$/m);
+  assert.match(human.stdout, /^ {2}off-peak: queued at position 1 \(ticket mock-ticket-1, draw 1\/3\)$/m);
   const json = await runBin(s.env, ['status', s.entry.id, '--json']);
   assert.equal(json.status, 0, json.stderr);
   const out = JSON.parse(json.stdout);
@@ -61,7 +61,7 @@ test('status --json：没有闲时投递时 offpeak 为 null，其余字段照�
   assert.equal(out.offpeak, null);
   for (const k of ['id', 'sessionId', 'phase', 'cwd', 'current', 'tools', 'queue', 'steerUnavailable', 'pending', 'last', 'totalTokens']) assert.ok(k in out, k);
   const human = await runBin(s.env, ['status', s.entry.id]);
-  assert.doesNotMatch(human.stdout, /闲时/);
+  assert.doesNotMatch(human.stdout, /off-peak/);
 });
 
 test('status 运行中：多一行「闲时：运行中（号 …，最晚 <本地时间> 截止）」', async (t) => {
@@ -75,7 +75,7 @@ test('status 运行中：多一行「闲时：运行中（号 …，最晚 <本�
   // 本地时间，中文 24 小时制到分钟（如 2026/9/29 00:00）
   const deadline = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
     .format(new Date(offpeakJson(s).activeDeadline));
-  assert.ok(human.stdout.includes(`  闲时：运行中（号 mock-ticket-1，最晚 ${deadline} 截止）`), human.stdout);
+  assert.ok(human.stdout.includes(`  off-peak: running (ticket mock-ticket-1, deadline ${deadline})`), human.stdout);
   const cancel = await cancelAndWait(s);
   await assertNoSecrets(s, [r.stdout, r.stderr, human.stdout, human.stderr, cancel.stdout, cancel.stderr]);
 });
@@ -88,8 +88,8 @@ test('status：号没结算成时多一行「闲时：号 … 未结算」', asy
   await waitRunnerGone(s.runsDir);
   assert.equal(settleRequests(s).length, 4);
   const human = await runBin(s.env, ['status', s.entry.id]);
-  assert.match(human.stdout, /^ {2}闲时：号 mock-ticket-1 未结算$/m);
-  assert.doesNotMatch(human.stdout, /排第|运行中/, '投递收尾了就不再显示排位或运行');
+  assert.match(human.stdout, /^ {2}off-peak: ticket mock-ticket-1 not settled$/m);
+  assert.doesNotMatch(human.stdout, /off-peak: queued at position|off-peak: running/, '投递收尾了就不再显示排位或运行');
   await assertNoSecrets(s, [r.stdout, r.stderr, human.stdout, human.stderr]);
 });
 
@@ -101,7 +101,7 @@ test('status：runner 已死而闲时投递没收尾时提示用 --offpeak --res
   await waitRunnerGone(s.runsDir);
   trackPids(s.runsDir);
   const human = await runBin(s.env, ['status', s.entry.id]);
-  assert.match(human.stdout, new RegExp(`^ {2}闲时：投递 offpeak-[0-9a-f-]{36} 没收尾，runner 已不在：用 send ${s.entry.id} --offpeak --resume 接着跑，或 cancel`, 'm'));
+  assert.match(human.stdout, new RegExp(`offpeak-[0-9a-f-]{36} not settled, runner is gone: run send ${s.entry.id} --offpeak --resume to continue, or cancel`, 'm'));
   await assertNoSecrets(s, [r.stdout, r.stderr, human.stdout, human.stderr]);
 });
 
@@ -110,7 +110,7 @@ test('follow 排号中：stderr 打闲时排位行；--json 带 offpeak 对象',
   const r = await queuedOffPeak(s);
   const human = await runBin(s.env, ['follow', s.entry.id, '--timeout', '1']);
   assert.equal(human.status, 3, human.stderr);
-  assert.match(human.stderr, /^follow: 闲时：排第 1 位（号 mock-ticket-1，第 1\/3 个号）$/m);
+  assert.match(human.stderr, /^follow: off-peak: queued at position 1 \(ticket mock-ticket-1, draw 1\/3\)$/m);
   const json = await runBin(s.env, ['follow', s.entry.id, '--timeout', '1', '--json']);
   assert.equal(json.status, 3, json.stderr);
   const out = JSON.parse(json.stdout);
@@ -136,7 +136,7 @@ test('send --offpeak --wait --stream：排号期间每次轮询在 stderr 打一
   const r = await runBin(s.env, ['send', s.entry.id, '闲时的活', '--offpeak', '--wait', '--stream']);
   trackPids(s.runsDir);
   assert.equal(r.status, 0, r.stderr);
-  const lines = [...r.stderr.matchAll(/^stream: 闲时：排第 1 位（号 mock-ticket-1，第 1\/3 个号）$/gm)];
+  const lines = [...r.stderr.matchAll(/^stream: off-peak: queued at position 1 \(ticket mock-ticket-1, draw 1\/3\)$/gm)];
   assert.ok(lines.length >= 2, r.stderr);
   await waitRunnerGone(s.runsDir);
   await assertNoSecrets(s, [r.stdout, r.stderr]);

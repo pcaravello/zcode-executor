@@ -1,14 +1,14 @@
 // src/client/tab-def.ts —— 右栏 tab 注册的纯数据面（register-tab.ts 的接线不掺 react，
 // 这一份不 import 任何运行时东西，node --test 直接喂数据断言：test/register-tab.test.mjs）。
-// 文案 v1 中文写死（SPEC 明确不做英文文案；locale 管线留接口不填字典）。
+// 文案 v1 起随 D26 写英文（SPEC 原定只做中文文案，D26 全面改英文；locale 管线留接口不填字典）。
 import type { ReactNode } from 'react';
 
 /** 右栏 tab 的实现 id（官方要求跨注册唯一，包名前缀）；kind 同 id（页面类型按 kind 打开）。 */
 export const TAB_ID = 'zcode-executor:tasks';
 export const TAB_KIND = 'zcode-executor:tasks';
 /** tab 标题与菜单条目文案。 */
-export const TAB_TITLE = 'zcode 任务';
-export const TAB_DESCRIPTION = '本机 zcode-executor 会话的实时观察面板';
+export const TAB_TITLE = 'zcode tasks';
+export const TAB_DESCRIPTION = 'Live watch pane for local zcode-executor sessions';
 /** guide 条目在菜单里的位置：排在宿主自己的条目（files/changes 等 10–30 段）之后。 */
 export const TAB_GUIDE_ORDER = 50;
 
@@ -54,5 +54,5 @@ export function tabDefinition(icon?: GuideIconLike): {
  */
 export function missingServiceNote(registered: boolean): string | null {
   if (registered) return null;
-  return '[dsh-zcode-executor] 到点仍未出现 sidebarRightTabs 服务（宿主版本过旧或仍在加载），右侧栏「zcode 任务」不挂载';
+  return '[dsh-zcode-executor] sidebarRightTabs service still absent after the timeout (host too old or still loading); the right-sidebar "zcode tasks" tab is not mounted';
 }

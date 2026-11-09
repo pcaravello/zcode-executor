@@ -134,7 +134,7 @@ test('readProviderRegistry：只有 legacy 时读临时文件并构造 registry�
     assert.equal(registry.providers.length, 3);
     assert.equal(registry.sources.legacy.ok, true);
     assert.equal(registry.sources.account.missing, true);
-    assert.ok(registry.warnings.some((w) => /credentials\.json 不存在/.test(w)), registry.warnings.join('；'));
+    assert.ok(registry.warnings.some((w) => /credentials\.json does not exist/.test(w)), registry.warnings.join('; '));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -146,8 +146,8 @@ test('readProviderRegistry：config.json 坏 JSON 不再直接抛——记 warni
   const registry = readProviderRegistry(fx.legacyPath, fx.options);
   assert.equal(registry.providers.length, 2); // 账号型两把 key 都在
   assert.equal(registry.sources.legacy.ok, false);
-  assert.match(registry.sources.legacy.error, /不是合法 JSON/);
-  assert.ok(registry.warnings.some((w) => /不是合法 JSON/.test(w)), registry.warnings.join('；'));
+  assert.match(registry.sources.legacy.error, /not valid JSON/);
+  assert.ok(registry.warnings.some((w) => /not valid JSON/.test(w)), registry.warnings.join('; '));
 });
 
 test('readProviderRegistry：两个来源都没有 provider → ExecutorError(1)，message 把两个原因都带上', async () => {
@@ -159,8 +159,8 @@ test('readProviderRegistry：两个来源都没有 provider → ExecutorError(1)
     (err) => {
       assert.ok(err instanceof ExecutorError);
       assert.equal(err.exitCode, 1);
-      assert.match(err.message, /credentials\.json 不存在/);
-      assert.match(err.message, /找不到 zcode 配置/);
+      assert.match(err.message, /credentials\.json does not exist/);
+      assert.match(err.message, /zcode config not found/);
       // sources 挂在 details 上，doctor 的 ② 排版要用
       assert.equal(err.details.sources.account.missing, true);
       assert.equal(err.details.sources.legacy.ok, false);
@@ -448,8 +448,8 @@ test('readProviderRegistry：只有账号型来源（config.json 不存在）也
     'account:bigmodel-team-coding-plan',
   ]);
   assert.equal(registry.sources.legacy.ok, false);
-  assert.match(registry.sources.legacy.error, /找不到 zcode 配置/);
-  assert.ok(registry.warnings.some((w) => /config\.json/.test(w) || /zcode 配置/.test(w)), registry.warnings.join('；'));
+  assert.match(registry.sources.legacy.error, /zcode config not found/);
+  assert.ok(registry.warnings.some((w) => /config\.json/.test(w) || /zcode config/.test(w)), registry.warnings.join('; '));
 });
 
 test('readProviderRegistry：credentials 在但内置文件不在 → 账号型来源记不可用，不抛（legacy 兜底）', async () => {
@@ -458,7 +458,7 @@ test('readProviderRegistry：credentials 在但内置文件不在 → 账号型�
   const registry = readProviderRegistry(fx.legacyPath, fx.options);
   assert.equal(registry.providers.length, 3);
   assert.equal(registry.sources.account.ok, false);
-  assert.match(registry.sources.account.error, /内置 provider 文件/);
+  assert.match(registry.sources.account.error, /builtin provider config file/);
 });
 
 test('pickProvider：account 个人版 > account 团队版 > legacy coding-plan > start-plan > 其它（T6-C 新优先级）', () => {
@@ -522,7 +522,7 @@ test('readProviderRegistry：注入 env 里没有的变量绝不从 process.env 
     });
     assert.equal(registry.sources.account.ok, false);
     assert.match(registry.sources.account.error, /from-injected-env/); // 报的是注入的那个坏值
-    assert.ok(registry.warnings.some((w) => /from-injected-env/.test(w)), registry.warnings.join('；'));
+    assert.ok(registry.warnings.some((w) => /from-injected-env/.test(w)), registry.warnings.join('; '));
   } finally {
     if (savedBin === undefined) delete process.env.ZCODE_BIN;
     else process.env.ZCODE_BIN = savedBin;

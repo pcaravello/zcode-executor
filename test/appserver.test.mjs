@@ -72,22 +72,22 @@ const isResponse = (m) => m.id !== undefined && m.method === undefined;
 const HEADERS_METHOD = 'interaction/requestProviderRuntimeHeaders';
 
 test('ExecutorError：带 exitCode 与 details', () => {
-  const err = new ExecutorError('白名单外的 cwd，改用 worktree 目录', 2, { cwd: '/tmp/x' });
+  const err = new ExecutorError('cwd outside the allowlist; use the worktree directory instead', 2, { cwd: '/tmp/x' });
   assert.ok(err instanceof Error);
-  assert.equal(err.message, '白名单外的 cwd，改用 worktree 目录');
+  assert.equal(err.message, 'cwd outside the allowlist; use the worktree directory instead');
   assert.equal(err.name, 'ExecutorError');
   assert.equal(err.exitCode, 2);
   assert.deepEqual(err.details, { cwd: '/tmp/x' });
 });
 
 test('ExecutorError：exitCode 默认 1，details 默认空对象', () => {
-  const err = new ExecutorError('出错了');
+  const err = new ExecutorError('something went wrong');
   assert.equal(err.exitCode, 1);
   assert.deepEqual(err.details, {});
 });
 
 test('ExecutorError：第二参传对象视为 details，退出码用默认（评审第 7 条）', () => {
-  const err = new ExecutorError('协议层不定退出码', { method: 'x' });
+  const err = new ExecutorError('the protocol layer does not set exit codes', { method: 'x' });
   assert.equal(err.exitCode, 1);
   assert.deepEqual(err.details, { method: 'x' });
 });
@@ -165,7 +165,7 @@ test('spawn：没有个人 provider 文件（参数与环境都没有）→ 抛 
   try {
     await assert.rejects(AppServerClient.spawn({ zcodePath: mock.zcodePath, cwd: mock.dir, env }), (err) => {
       assert.ok(err instanceof ExecutorError);
-      assert.match(err.message, /个人 provider 文件/);
+      assert.match(err.message, /personal provider config file/);
       assert.match(err.message, /ZCODE_PERSONAL_PROVIDER_CONFIG_FILE/);
       return true;
     });
@@ -181,7 +181,8 @@ test('spawn：内置 provider 文件的环境变量指向不存在的文件 → 
   try {
     await assert.rejects(
       AppServerClient.spawn({ zcodePath: mock.zcodePath, cwd: mock.dir, env }),
-      (err) => err instanceof ExecutorError && /ZCODE_BUILTIN_PROVIDER_CONFIG_FILE 指向的文件不存在/.test(err.message),
+      (err) => err instanceof ExecutorError
+        && /The file the ZCODE_BUILTIN_PROVIDER_CONFIG_FILE environment variable points to does not exist/.test(err.message),
     );
     assert.deepEqual(readRecord(mock.recordPath), []); // 没起 mock，记录为空
   } finally {
@@ -260,8 +261,8 @@ test('spawn：宿主代理自己的凭据环境变量不带给子进程，经 op
         for (const name of kept) assert.equal(reported(name), 'set', name);
         // 没带过去的名字在本进程 stderr 说一行（只有名字），排障时看得到
         const note = stderrLines.find((l) => l.startsWith('appserver: ') && l.includes('GITHUB_TOKEN'));
-        assert.ok(note, `stderr 应有一行列出没带的变量名，实际：${stderrLines.join(' | ')}`);
-        assert.equal(stderrLines.some((l) => l.includes('host-secret-')), false, '值不进任何输出');
+        assert.ok(note, `stderr should have a line listing the withheld variable names; got: ${stderrLines.join(' | ')}`);
+        assert.equal(stderrLines.some((l) => l.includes('host-secret-')), false, 'the value must not appear in any output');
       } finally {
         if (client) await client.close({ timeoutMs: 2000 }).catch(() => {});
       }
@@ -291,19 +292,19 @@ test('没有 requestId 的反向请求：参数不同就是两个请求，各过
         assert.equal(req.params.requestId, undefined);
         seen.push(req.params.input.command);
         await sleep(150); // 拖到各自重发过几轮再答：同一个请求的重发（参数一字不差）仍然只跑一次处理器
-        return req.params.input.command === 'ls' ? { decision: 'allow' } : { decision: 'deny', reason: '人工拒绝' };
+        return req.params.input.command === 'ls' ? { decision: 'allow' } : { decision: 'deny', reason: 'denied by human' };
       },
     },
     async ({ stderrLines }) => {
       const answered = () => stderrLines.filter((l) => l.includes('serverRequest interaction/requestPermission answered'));
       await waitFor(() => (answered().length >= 2 ? true : undefined), { timeoutMs: 3000 });
-      assert.deepEqual([...seen].sort(), ['ls', 'rm -rf ~'], '两个请求各跑一次处理器，重发不重跑');
+      assert.deepEqual([...seen].sort(), ['ls', 'rm -rf ~'], 'each request must run its handler once; re-sends must not re-run it');
       assert.deepEqual(
         answered().map((l) => JSON.parse(l.slice(l.indexOf('answered: ') + 'answered: '.length)).decision).sort(),
         ['allow', 'deny'],
       );
       const resent = stderrLines.filter((l) => l.includes('server-request interaction/requestPermission'));
-      assert.ok(resent.length >= 4, `150ms 处理器 + 40ms 重发：两个请求都重发过（实际 ${resent.length} 次）`);
+      assert.ok(resent.length >= 4, `150ms handler + 40ms re-send: both requests should have been re-sent (got ${resent.length})`);
       assert.ok(resent.every((l) => l.includes('requestId=(none)')));
     },
   );
@@ -439,7 +440,7 @@ test('command()：sendText 指向不存在的会话 → 抛 ExecutorError，deta
       (err) => {
         assert.ok(err instanceof ExecutorError);
         // 本机探针（App 3.12.2，2026-09-21）：不存在的 sessionId → {status:"rejected", reasonCode:"proto.sessionNotFound"}
-        assert.match(err.message, /v4 命令 sendText 未被接受：rejected（proto\.sessionNotFound）/);
+        assert.match(err.message, /v4 command sendText was not accepted: rejected \(proto\.sessionNotFound\)/);
         assert.equal(err.details.reasonCode, 'proto.sessionNotFound');
         assert.equal(err.details.type, 'sendText');
         assert.equal(err.details.status, 'rejected');
@@ -456,7 +457,7 @@ test('command()：sendText 空正文 → 抛错，details 带 proto.invalidPaylo
     // 本机探针（App 3.12.2，2026-09-21）：空正文 →
     // {status:"failed", reasonCode:"proto.invalidPayload", message:"input must not be empty"}
     await assert.rejects(client.command(created.session.sessionId, 'sendText', { text: '' }), (err) => {
-      assert.match(err.message, /v4 命令 sendText 未被接受：failed（proto\.invalidPayload）：input must not be empty/);
+      assert.match(err.message, /v4 command sendText was not accepted: failed \(proto\.invalidPayload\): input must not be empty/);
       assert.equal(err.details.reasonCode, 'proto.invalidPayload');
       assert.equal(err.details.message, 'input must not be empty');
       return true;
@@ -499,7 +500,7 @@ test('剧本让方法挂住 → 请求超时，信息里有方法名', async () 
     const startedAt = Date.now();
     await assert.rejects(client.request('session/list', {}, { timeoutMs: 200 }), (err) => {
       assert.ok(err instanceof ExecutorError);
-      assert.match(err.message, /超时/);
+      assert.match(err.message, /Timed out/);
       assert.match(err.message, /session\/list/);
       return true;
     });
@@ -514,7 +515,7 @@ test('exitAfter 让子进程崩：挂着的请求全部 reject，exited code 3',
     assert.deepEqual(await answered, { eventSeq: 0, snapshot: {} }); // exitAfter 的方法本身有应答
     await assert.rejects(pending, (err) => {
       assert.ok(err instanceof ExecutorError);
-      assert.match(err.message, /退出/);
+      assert.match(err.message, /has exited/);
       assert.equal(err.details.method, 'session/list');
       return true;
     });
@@ -547,7 +548,7 @@ test('stdin 关闭后 request 立刻 reject，不等满超时', async () => {
     void client.close({ timeoutMs: 5000 }); // 关 stdin，进程还活着
     await assert.rejects(client.request('anything', {}, { timeoutMs: 30_000 }), (err) => {
       assert.ok(err instanceof ExecutorError);
-      assert.match(err.message, /连接已关闭/);
+      assert.match(err.message, /connection is closed/);
       assert.match(err.message, /anything/);
       return true;
     });
@@ -734,10 +735,10 @@ test('剧本开 runtimeHeaders：providerAuth 没给 key → 应答 headersAppli
       assert.deepEqual(types, ['turn.started', 'turn.failed']);
       const failed = notifications.find((n) => n.params?.type === 'turn.failed');
       const answer = readRecord(recordPath).find((m) => isResponse(m) && m.result?.headersApplied !== undefined);
-      assert.deepEqual(answer.result, { headersApplied: false, errorMessage: 'zcode-executor 没有 provider zcode-executor 的 API key，模型请求发不出去' });
+      assert.deepEqual(answer.result, { headersApplied: false, errorMessage: 'zcode-executor has no API key for provider zcode-executor; the model request cannot be sent' });
       // zcode.cjs：失败信息取应答里的 errorMessage，没给才是那句固定原文
       assert.equal(failed.params.payload.error.message, answer.result.errorMessage);
-      assert.ok(stderrLines.some((l) => l.includes('appserver: 没有 provider zcode-executor 的 API key')));
+      assert.ok(stderrLines.some((l) => l.includes('appserver: no API key for provider zcode-executor')));
     },
   );
 });
@@ -801,7 +802,7 @@ test('剧本开 runtimeHeaders：generateText 头没应用上 → -32031，messa
       ),
       (err) => {
         assert.equal(err.details.code, -32031);
-        assert.match(err.message, /没有 provider zcode-executor 的 API key/);
+        assert.match(err.message, /no API key for provider zcode-executor/);
         return true;
       },
     );
@@ -1008,7 +1009,7 @@ test('应答形状不对时 mock 在 stderr 警告一行', async () => {
     async ({ client, stderrLines }) => {
       await create(client, { model: FLASH });
       await client.request('session/send', { sessionId: 'whatever' }, { timeoutMs: 2000 });
-      await waitFor(() => (stderrLines.some((l) => l.includes('应答形状不对')) ? true : undefined));
+      await waitFor(() => (stderrLines.some((l) => l.includes('unexpected answer shape')) ? true : undefined));
       assert.ok(stderrLines.some((l) => l.includes('interaction/requestPermission')));
     },
   );

@@ -1,7 +1,7 @@
 {
   "name": "zcode-executor",
   "version": "0.6.1",
-  "description": "把想清楚的开发任务派给本机 ZCode（GLM）执行，隔离在 worktree 里跑，红线加模型审批把关，用 git diff 和测试验收",
+  "description": "Claude plans, ZCode codes, git verifies. Hand a development task to the local ZCode (GLM) agent in an isolated git worktree, with a hard-rule + model-review permission gate.",
   "author": {
     "name": "kyomio"
   },

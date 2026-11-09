@@ -91,17 +91,17 @@ The plugin also ships a **Claude Code mod** (a module of function hooks, `hooks/
 
 ### DeepSeek Harness (DSH)
 
-The npm package **is** the DSH plugin: the root `package.json` carries the `dsh` definition (`cordis.patch.yml` bundle + right-sidebar client), and the plugin code is the built output under `dsh-plugin/lib/` (sources in [dsh-plugin/](dsh-plugin/README.md)). In the DSH desktop app's plugin page, just install by the npm package name `zcode-executor` — the app registers the bundle by itself; no manual `link:` or config editing. The plugin teaches the DSH agent the full dispatch flow (the skill auto-symlinks into `~/.dsh/skills/`) and adds the **"zcode 任务" tab** to the official right sidebar — the same live watch pane, refreshing about once a second at zero quota. Local development: `pnpm install && npm run build` inside `dsh-plugin/`, then restart the desktop app.
+The npm package **is** the DSH plugin: the root `package.json` carries the `dsh` definition (`cordis.patch.yml` bundle + right-sidebar client), and the plugin code is the built output under `dsh-plugin/lib/` (sources in [dsh-plugin/](dsh-plugin/README.md)). In the DSH desktop app's plugin page, just install by the npm package name `zcode-executor` — the app registers the bundle by itself; no manual `link:` or config editing. The plugin teaches the DSH agent the full dispatch flow (the skill auto-symlinks into `~/.dsh/skills/`) and adds the **"zcode tasks" tab** to the official right sidebar — the same live watch pane, refreshing about once a second at zero quota. Local development: `pnpm install && npm run build` inside `dsh-plugin/`, then restart the desktop app.
 
 ### Kimi Work
 
-The repo root ships a native `kimi.plugin.json` (skills only; the Claude Code mod above is Claude-only and not included). Register it into the personal market once, then install from the 个人 tab:
+The repo root ships a native `kimi.plugin.json` (skills only; the Claude Code mod above is Claude-only and not included). Register it into the personal market once, then install from the Personal tab:
 
 ```bash
 kimi-daimon kimi-plugin register-personal /path/to/zcode-executor
 ```
 
-Like the agents below, Kimi Work does not put the plugin's `bin/` on `PATH` — the skill falls back to `bin/zcode-executor` relative to the plugin root, or `npx zcode-executor`. Saying 「让 zcode 去做」「派给 zcode」 triggers the skill.
+Like the agents below, Kimi Work does not put the plugin's `bin/` on `PATH` — the skill falls back to `bin/zcode-executor` relative to the plugin root, or `npx zcode-executor`. Saying 「让 zcode 去做」「派给 zcode」 ("tell zcode to do it", "hand the task to zcode") triggers the skill.
 
 ### Codex
 
@@ -244,7 +244,7 @@ A message longer than two lines is folded to its first two; press **Expand reply
 The pane opens by itself when Claude sends a task. The status line sums up running turns and pending requests, and a toast pops on a pending request, a finished turn, or a dead runner. The pane is read-only: pending requests still go through Claude.
 It reads `zcode-executor watch --json` (read-only, long-running, no quota) and shows only sessions of the repository the Claude session is in. If the pane says node cannot be found, set `nodePath` in the plugin's settings.
 
-**DSH**: the `dsh-plugin/` install above shows the same live view in the right sidebar's "zcode 任务" tab, refreshing about once a second at zero quota. It is read-only there too — pending requests go to the dispatching agent, which handles them per the skill's answering rules.
+**DSH**: the `dsh-plugin/` install above shows the same live view in the right sidebar's "zcode tasks" tab, refreshing about once a second at zero quota. It is read-only there too — pending requests go to the dispatching agent, which handles them per the skill's answering rules.
 
 Other agents have no pane and keep using the skill and the CLI.
 

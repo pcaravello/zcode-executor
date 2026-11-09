@@ -37,15 +37,15 @@ test('send --start-plan：会话模型不在 start plan 模型表 → 退出码 
   assert.equal(s.entry.modelId, 'GLM-5.3');
   const r = await runBin(s.env, ['send', s.entry.id, '活', '--start-plan']);
   assert.equal(r.status, 2, r.stderr);
-  assert.match(r.stderr, /GLM-5\.3 不在 start plan 模型表/);
-  assert.match(r.stderr, /GLM-5\.3-Flash、GLM-5\.2、GLM-5-Turbo/);
+  assert.match(r.stderr, /GLM-5\.3 is not in the start-plan model list/);
+  assert.match(r.stderr, /GLM-5\.3-Flash, GLM-5\.2, GLM-5-Turbo/);
 });
 
 test('send --start-plan：凭据里没有 JWT → 退出码 2，原因原样给', async (t) => {
   const s = await setup(t, { tier: 'fast', credentials: {} });
   const r = await runBin(s.env, ['send', s.entry.id, '活', '--start-plan']);
   assert.equal(r.status, 2, r.stderr);
-  assert.match(r.stderr, /start plan 投递用不了/);
+  assert.match(r.stderr, /start-plan send is unavailable/);
   assert.match(r.stderr, /zcodejwttoken/);
 });
 
@@ -61,7 +61,7 @@ test('send --start-plan：内置文件没有 start plan 条目 → 退出码 2�
     ZCODE_BUILTIN_PROVIDER_CONFIG_FILE: stripped,
   });
   assert.equal(r.status, 2, r.stderr);
-  assert.match(r.stderr, /找不到 start plan 条目的模型表/);
+  assert.match(r.stderr, /start-plan entry cannot be found/);
 });
 
 test('send --start-plan：内置文件环境变量指到不存在的文件 → CLI 启动就报环境问题（退出码 1），轮不到前置检查', async (t) => {
@@ -156,7 +156,7 @@ test('send --start-plan：授权回执对不上 → 投递按 failed 结束，�
   assert.equal(r.status, 4, r.stderr);
   const last = readJson(path.join(s.runsDir, 'last.json'));
   assert.equal(last.outcome, 'failed');
-  assert.match(last.reason, /start plan 授权没推成/);
+  assert.match(last.reason, /failed to push the start-plan authorization/);
   assert.ok(readEvents(s.runsDir).some((e) => e.type === 'executor.result' && e.outcome === 'failed'));
   trackPids(s.runsDir);
   await waitRunnerGone(s.runsDir);
@@ -171,8 +171,8 @@ test('runner 接手 start plan 项时凭据没了 → 投递按 failed 结束，
   await waitFor(() => existsSync(path.join(s.runsDir, 'last.json')));
   const last = readJson(path.join(s.runsDir, 'last.json'));
   assert.equal(last.outcome, 'failed');
-  assert.match(last.reason, /start plan 凭据读不了/);
-  assert.match(last.reason, /登录/);
+  assert.match(last.reason, /cannot read the start-plan credentials/);
+  assert.match(last.reason, /no account login/);
   trackPids(s.runsDir);
   await waitRunnerGone(s.runsDir);
   await assertNoSecrets(s, []);

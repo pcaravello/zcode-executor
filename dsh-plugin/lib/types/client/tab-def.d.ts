@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 export declare const TAB_ID = "zcode-executor:tasks";
 export declare const TAB_KIND = "zcode-executor:tasks";
 /** tab 标题与菜单条目文案。 */
-export declare const TAB_TITLE = "zcode \u4EFB\u52A1";
-export declare const TAB_DESCRIPTION = "\u672C\u673A zcode-executor \u4F1A\u8BDD\u7684\u5B9E\u65F6\u89C2\u5BDF\u9762\u677F";
+export declare const TAB_TITLE = "zcode tasks";
+export declare const TAB_DESCRIPTION = "Live watch pane for local zcode-executor sessions";
 /** guide 条目在菜单里的位置：排在宿主自己的条目（files/changes 等 10–30 段）之后。 */
 export declare const TAB_GUIDE_ORDER = 50;
 /** guide 条目图标的结构镜像（primitives IconProps 的用到的子集；better-sidebar 同款镜像法）。 */

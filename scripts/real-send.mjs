@@ -50,7 +50,7 @@ function selectProvider(registry, wanted) {
   const hit = registry.providers.find((p) => p.providerId === wanted);
   if (!hit) {
     console.error(
-      `real-send: registry 里没有 provider ${wanted}。现有的：${registry.providers.map((p) => p.providerId).join('、') || '（空）'}`,
+      `real-send: provider ${wanted} is not in the registry. Existing providers: ${registry.providers.map((p) => p.providerId).join(', ') || '(none)'}`,
     );
     process.exit(EXIT_USAGE);
   }
@@ -74,7 +74,7 @@ function parseArgs(argv) {
     if (VALUE_FLAGS.includes(a)) {
       const value = argv[++i];
       if (value === undefined) {
-        console.error(`real-send: ${a} 后缺一个值`);
+        console.error(`real-send: missing a value after ${a}`);
         process.exit(EXIT_USAGE);
       }
       // --on-permission → onPermission（驼峰键）
@@ -82,23 +82,23 @@ function parseArgs(argv) {
       args[key] = value;
       continue;
     }
-    console.error(`real-send: 不认识的参数 ${a}`);
+    console.error(`real-send: unknown flag ${a}`);
     process.exit(EXIT_USAGE);
   }
   // --resume 靠目录定位会话归属，不给 cwd 就不知道要接哪条工作区的会话
   if (args.resume && !args.cwd) {
-    console.error('real-send: --resume 需要同时给 --cwd');
+    console.error('real-send: --resume requires --cwd as well');
     process.exit(EXIT_USAGE);
   }
   if (args.onPermission !== undefined && !['allow', 'deny'].includes(args.onPermission)) {
-    console.error('real-send: --on-permission 只能是 allow 或 deny');
+    console.error('real-send: --on-permission must be allow or deny');
     process.exit(EXIT_USAGE);
   }
   for (const key of ['steerAfter', 'stopAfter']) {
     if (args[key] === undefined) continue;
     const n = Number(args[key]);
     if (!Number.isFinite(n) || n < 0) {
-      console.error(`real-send: --${key === 'steerAfter' ? 'steer-after' : 'stop-after'} 要非负秒数，收到：${args[key]}`);
+      console.error(`real-send: --${key === 'steerAfter' ? 'steer-after' : 'stop-after'} expects a non-negative number of seconds, got: ${args[key]}`);
       process.exit(EXIT_USAGE);
     }
     args[key] = n;
@@ -110,7 +110,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.yes) {
     // RULES §9：会花钱的脚本，没有 --yes 不读配置、不 spawn，直接拒
-    console.error('real-send: 这次会花额度（真实投递给 zcode，消耗编码计划）。确认要跑请加 --yes。');
+    console.error('real-send: this will spend quota (a real send to zcode, billed to the coding plan). Add --yes to confirm.');
     process.exit(EXIT_USAGE);
   }
 
@@ -144,7 +144,7 @@ async function main() {
       try {
         execFileSync('git', ['init', '--quiet'], { cwd, stdio: 'ignore' });
       } catch (err) {
-        console.error(`real-send: git init 失败（${err.message}），继续用普通目录`);
+        console.error(`real-send: git init failed (${err.message}); continuing with a plain directory`);
       }
     }
     cwd = path.resolve(cwd);
@@ -158,7 +158,7 @@ async function main() {
     const apiKey = provider.apiKey?.value;
     const providerAuth = (providerId) => {
       // 检查点 5（2026-09-18）：api-key provider 没来过这个反向请求；留一行 stderr，哪天来了能被看见
-      console.error(`real-send: [反向请求] requestProviderRuntimeHeaders providerId=${providerId ?? '(缺 providerId)'}`);
+      console.error(`real-send: [reverse request] requestProviderRuntimeHeaders providerId=${providerId ?? '(missing providerId)'}`);
       return providerId === EXECUTOR_PROVIDER_ID ? apiKey : undefined;
     };
     client = await AppServerClient.spawn({ cwd, secrets, personalProviderFile: personalFile.path, providerAuth });
@@ -238,7 +238,7 @@ async function main() {
     try {
       await client?.close({ timeoutMs: 5000 });
     } catch (err) {
-      console.error(`real-send: 收场失败：${scrubValues(String(err?.message ?? err), secrets)}`);
+      console.error(`real-send: close failed: ${scrubValues(String(err?.message ?? err), secrets)}`);
     }
     // D14：个人 provider 文件用完即删，不管上面成功还是出错
     personalFile?.dispose();
@@ -251,13 +251,13 @@ async function main() {
       if (pending.kind === 'permission') {
         // T1.2b 第 6 条：input 可能回显敏感内容，打印前过 scrub
         const input = scrubValues(JSON.stringify(pending.input ?? {}), secrets);
-        console.error(`real-send: [挂起·审批] ${pending.toolName} ${input} —— ${pending.reason ?? '无理由'}`);
+        console.error(`real-send: [pending permission] ${pending.toolName} ${input} — ${pending.reason ?? 'no reason given'}`);
         const response = await decidePermission();
         if (response === null) return; // 已走 blocked 收场
         gate.answer(response);
         return;
       }
-      console.error('real-send: [挂起·提问]');
+      console.error('real-send: [pending question]');
       const values = await decideQuestionValues(pending);
       if (values === null) return;
       gate.answer({ values });
@@ -271,7 +271,7 @@ async function main() {
       return { decision: args.onPermission }; // 预给答案优先（非终端环境）
     }
     if (process.stdin.isTTY) {
-      const line = (await ask('real-send: 允许这次操作？(y=允许 / n=拒绝) > ')).trim();
+      const line = (await ask('real-send: allow this action? (y = allow / n = deny) > ')).trim();
       if (!line) return { decision: 'deny' }; // 空答案按 deny
       return line.toLowerCase() === 'y' ? { decision: 'allow' } : { decision: 'deny' };
     }
@@ -288,9 +288,9 @@ async function main() {
       const values = [];
       for (const q of pending.questions ?? []) {
         const choices = (q.options ?? []).map((o, i) => `${i + 1}=${o.label ?? o.value}`).join(' ');
-        const hint = choices ? `（${choices}${q.multiSelect ? '，多选逗号分隔' : ''}）` : '（直接输文字）';
+        const hint = choices ? ` (${choices}${q.multiSelect ? ', multi-select, comma-separated' : ''})` : ' (type free text)';
         const line = (await ask(`real-send: ${q.question}${hint} > `)).trim();
-        if (!line) throw new ExecutorError(`提问「${q.question ?? ''}」答案为空，拒绝作答`);
+        if (!line) throw new ExecutorError(`the answer to question "${q.question ?? ''}" is empty; refusing to answer`);
         values.push(q.multiSelect && line.includes(',') ? line.split(',').map((x) => x.trim()) : line);
       }
       return values;

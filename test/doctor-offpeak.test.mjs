@@ -129,14 +129,14 @@ test('doctor --offpeak --json：四层都符合 → ok，退出码 0，形状 {o
   assert.match(sent.content, /\bok\b/);
   // 自检会话起一个好认的标题（v4 renameSession）
   const rename = record.find((m) => m.method === 'v4/command' && m.params.type === 'renameSession');
-  assert.equal(rename.params.payload.title, 'zcode-executor doctor 闲时自检');
+  assert.equal(rename.params.payload.title, 'zcode-executor doctor off-peak self-check');
   await assertCleanAndSecretFree(r);
 });
 
 test('doctor --offpeak 人读：只有 ⑤ 一行「正常」', async () => {
   const r = await runDoctor(['doctor', '--offpeak']);
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(r.stdout, 'doctor ⑤ 闲时：正常\n');
+  assert.equal(r.stdout, 'doctor ⑤ off-peak: ok\n');
 });
 
 test('内置文件里闲时条目被删 → 接口变了（内置条目），退出码 1', async () => {
@@ -151,7 +151,7 @@ test('内置文件里闲时条目被删 → 接口变了（内置条目），退
 
   const plain = await runDoctor(['doctor', '--offpeak'], { builtin: withoutRule('account:bigmodel-offpeak-idle-plan') });
   assert.equal(plain.status, 1);
-  assert.match(plain.stdout, /^doctor ⑤ 闲时：接口变了（内置条目：期望 .+，实际 .+）\n$/);
+  assert.match(plain.stdout, /^doctor ⑤ off-peak: changed \(the app's internal interface changed\) \(builtin entry: expected .+, actual .+\)\n$/);
 });
 
 test('闲时条目的 baseUrl 变了 → 接口变了（内置条目），期望与实际都写明', async () => {
@@ -182,7 +182,7 @@ test('服务器查排位回的假号状态不是 not_found → 接口变了（�
   assert.equal(readRecord(r.mock.recordPath).length, 0, '服务器层不符就不起 app-server');
 
   const plain = await runDoctor(['doctor', '--offpeak'], { offpeak });
-  assert.match(plain.stdout, /^doctor ⑤ 闲时：接口变了（服务器约定：期望 .+，实际 .+，logid log-status-shape）\n$/);
+  assert.match(plain.stdout, /^doctor ⑤ off-peak: changed \(the app's internal interface changed\) \(server contract: expected .+, actual .+, logid log-status-shape\)\n$/);
 });
 
 test('服务器回的返回形状不对（tickets 不是数组）→ 接口变了（服务器约定）', async () => {
@@ -236,11 +236,11 @@ test('闲时服务器回 503 → 暂时不可用，退出码 0，stderr 另有�
   assert.equal(out.offpeak.state, 'unavailable');
   assert.equal(out.offpeak.layer, 'server');
   assert.match(out.offpeak.reason, /503/);
-  assert.match(r.stderr, /^doctor: 警告：闲时.+$/m);
+  assert.match(r.stderr, /^doctor: warning: the off-peak.+$/m);
 
   const plain = await runDoctor(['doctor', '--offpeak'], { offpeak });
   assert.equal(plain.status, 0);
-  assert.match(plain.stdout, /^doctor ⑤ 闲时：暂时不可用（.*503.*）\n$/);
+  assert.match(plain.stdout, /^doctor ⑤ off-peak: temporarily unavailable \(.*503.*\)\n$/);
 });
 
 test('没有 JWT（没在 App 里用账号登录）→ 不适用，退出码 0，不问服务器', async () => {
@@ -253,7 +253,7 @@ test('没有 JWT（没在 App 里用账号登录）→ 不适用，退出码 0�
   assert.equal(r.server.requests.length, 0);
 
   const plain = await runDoctor(['doctor', '--offpeak'], { credentials: {} });
-  assert.match(plain.stdout, /^doctor ⑤ 闲时：不适用（.+）\n$/);
+  assert.match(plain.stdout, /^doctor ⑤ off-peak: not applicable \(.+\)\n$/);
 });
 
 test('只有团队版 key → 不适用（团队版暂不支持）', async () => {
@@ -261,7 +261,7 @@ test('只有团队版 key → 不适用（团队版暂不支持）', async () =>
   assert.equal(r.status, 0, r.stderr);
   const out = JSON.parse(r.stdout);
   assert.equal(out.offpeak.state, 'not-applicable');
-  assert.match(out.offpeak.reason, /团队版/);
+  assert.match(out.offpeak.reason, /team Coding Plan/);
 });
 
 test('App 版本不是 3.14.1 → stderr 多一行提示，不影响结论；推不出版本报「未知」', async () => {
@@ -270,11 +270,11 @@ test('App 版本不是 3.14.1 → stderr 多一行提示，不影响结论；推
   const out = JSON.parse(older.stdout);
   assert.equal(out.offpeak.state, 'ok');
   assert.equal(out.offpeak.appVersion, '3.13.0');
-  assert.match(older.stderr, /^doctor: 闲时路径只在 App 3\.14\.1 上真机验证过（当前 3\.13\.0）$/m);
+  assert.match(older.stderr, /^doctor: the off-peak path has only been verified against App 3\.14\.1 on a real machine \(current: 3\.13\.0\)$/m);
 
   const unknown = await runDoctor(['doctor', '--offpeak', '--json'], { appVersion: null });
   assert.equal(JSON.parse(unknown.stdout).offpeak.appVersion, null);
-  assert.match(unknown.stderr, /^doctor: 闲时路径只在 App 3\.14\.1 上真机验证过（当前 未知）$/m);
+  assert.match(unknown.stderr, /^doctor: the off-peak path has only been verified against App 3\.14\.1 on a real machine \(current: unknown\)$/m);
 });
 
 test('不带参数的 doctor：①–④ 之后多一行 ⑤，--json 多 offpeak 对象', async () => {
@@ -282,7 +282,7 @@ test('不带参数的 doctor：①–④ 之后多一行 ⑤，--json 多 offpea
   assert.equal(r.status, 0, r.stderr);
   const lines = r.stdout.trim().split('\n');
   assert.match(lines[0], /^doctor ① /);
-  assert.equal(lines.at(-1), 'doctor ⑤ 闲时：正常');
+  assert.equal(lines.at(-1), 'doctor ⑤ off-peak: ok');
   assert.match(lines.at(-2), /^doctor ④ /);
 
   const json = await runDoctor(['doctor', '--json']);
@@ -308,7 +308,7 @@ test('不带参数的 doctor：⑤ 接口变了 → 退出码 1；⑤ 不适用�
 
   const down = await runDoctor(['doctor'], { offpeak: { failRoute: { availability: { status: 503 } } } });
   assert.equal(down.status, 0, down.stderr);
-  assert.match(down.stdout, /doctor ⑤ 闲时：暂时不可用/);
+  assert.match(down.stdout, /doctor ⑤ off-peak: temporarily unavailable/);
 });
 
 test('全链路结论不是 ok 时才打印 zcode 子进程的 stderr（按 secrets 抹过，最多 50 行）', async () => {
@@ -332,7 +332,7 @@ test('推授权被拒的原话里带着凭据 → actual 按 secrets 抹掉', as
 test('结论是不适用时不打「只在 3.14.1 上验证过」的提示', async () => {
   const r = await runDoctor(['doctor', '--offpeak', '--json'], { credentials: {}, appVersion: '3.13.0' });
   assert.equal(JSON.parse(r.stdout).offpeak.state, 'not-applicable');
-  assert.doesNotMatch(r.stderr, /真机验证过/);
+  assert.doesNotMatch(r.stderr, /verified against App/);
 });
 
 test('zcode 找不到（没装 ZCode App）→ 不适用', async () => {
@@ -364,7 +364,7 @@ test('闲时服务地址不合法：不带参数的 doctor 报 ⑤ 暂时不可�
   const only = await runDoctor(['doctor', '--offpeak', '--json'], { envOverrides });
   assert.equal(only.status, 1);
   assert.equal(only.stdout, '');
-  assert.match(only.stderr, /^doctor: 闲时服务地址必须是 https/m);
+  assert.match(only.stderr, /^doctor: the off-peak server address must be https/m);
 });
 
 // ---------- 直接调 runOffPeakCheck：暂时性失败、重跑、形状不对（SPEC-offpeak F「补充分类」） ----------
@@ -397,7 +397,7 @@ test('直接调：回合在 turnTimeoutMs 内没结束 → 暂时不可用', asy
   const r = await directCheck({ script: { offPeakTurnError: false, turns: [{ hang: true }] }, turnTimeoutMs: 300 });
   assert.equal(r.result.state, 'unavailable');
   assert.equal(r.result.layer, 'chain');
-  assert.match(r.result.reason, /没结束/);
+  assert.match(r.result.reason, /timed out before finishing/);
   assert.deepEqual(r.leftovers, []);
 });
 

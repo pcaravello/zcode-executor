@@ -194,7 +194,7 @@ exports.SNAPSHOT_PATH = '/zcode-executor/snapshot';
 exports.REPO_PATH = '/zcode-executor/repo';
 const LINKS = ['starting', 'live', 'down', 'failed'];
 /** admit 拒绝（snapshot 回 401/403）时合成的连接说明：传输是通的，病根在鉴权（Task 8 ⑥）。 */
-const AUTH_DENIED_MESSAGE = '无权访问（admit 拒绝）：本机登录态可能已失效，重新登录 DSH 后自动恢复';
+const AUTH_DENIED_MESSAGE = 'Access denied (admit refused): the local sign-in may have expired; sign in to DSH again and it recovers automatically';
 /** 子客户端 zen-remote 拦截层回未桥接时的响应标记：503 + 这个响应头（PB-6 协议）。 */
 const UNBRIDGED_HEADER = 'x-zen-remote';
 const UNBRIDGED_HEADER_VALUE = 'unbridged';
@@ -214,15 +214,15 @@ function unbridgedMessageOf(reason) {
     switch (reason) {
         case 'not-on-server':
         case 'version-mismatch':
-            return '远程面板暂不可用：主服务端未安装同版本的本插件（两端装同版本后自动恢复）。';
+            return 'Remote pane temporarily unavailable: the main server does not have the same version of this plugin installed (recovers automatically once both ends run the same version).';
         case 'consent-off':
-            return '远程面板暂不可用：主服务端未允许转发整机数据（主服务端主人在 zen-remote 设置里同意后自动恢复）。';
+            return 'Remote pane temporarily unavailable: the main server has not allowed forwarding machine-wide data (recovers automatically after the main server owner consents in the zen-remote settings).';
         case 'offline':
-            return '远程面板暂不可用：中继离线（远程链路恢复后自动重试）。';
+            return 'Remote pane temporarily unavailable: the relay is offline (retries automatically once the remote link recovers).';
         case 'server-too-old':
-            return '远程面板暂不可用：主服务端的 zen-remote 版本过旧（升级服务端后自动恢复）。';
+            return 'Remote pane temporarily unavailable: the main server\'s zen-remote is too old (recovers automatically after upgrading the server).';
         default:
-            return `远程面板暂不可用（插件桥未桥接，原因：${reason}），恢复后自动重试。`;
+            return `Remote pane temporarily unavailable (plugin bridge unbridged, reason: ${reason}); retries automatically once it recovers.`;
     }
 }
 /** 连接态守卫：JSON 来的字段不受类型标注约束，先认值再存。 */
@@ -248,22 +248,22 @@ function createSnapshotStore(options) {
     const retryMs = options.retryMs ?? 3000;
     // 0 或负数的间隔会让轮询/重试变成紧密循环打爆服务器，构造时就拒绝
     if (!Number.isFinite(pollMs) || pollMs <= 0) {
-        throw new Error(`createSnapshotStore：pollMs 必须是正的有限数，收到 ${pollMs}`);
+        throw new Error(`createSnapshotStore: pollMs must be a positive finite number, got ${pollMs}`);
     }
     if (!Number.isFinite(retryMs) || retryMs <= 0) {
-        throw new Error(`createSnapshotStore：retryMs 必须是正的有限数，收到 ${retryMs}`);
+        throw new Error(`createSnapshotStore: retryMs must be a positive finite number, got ${retryMs}`);
     }
     const firstResponseMs = options.firstResponseMs ?? 15_000;
     if (!Number.isFinite(firstResponseMs) || firstResponseMs <= 0) {
-        throw new Error(`createSnapshotStore：firstResponseMs 必须是正的有限数，收到 ${firstResponseMs}`);
+        throw new Error(`createSnapshotStore: firstResponseMs must be a positive finite number, got ${firstResponseMs}`);
     }
     const safetyPollMs = options.safetyPollMs ?? 2_000;
     if (!Number.isFinite(safetyPollMs) || safetyPollMs < 0) {
-        throw new Error(`createSnapshotStore：safetyPollMs 必须是非负有限数（0 关闭），收到 ${safetyPollMs}`);
+        throw new Error(`createSnapshotStore: safetyPollMs must be a non-negative finite number (0 disables), got ${safetyPollMs}`);
     }
     const unbridgedRetryMs = options.unbridgedRetryMs ?? 5_000;
     if (!Number.isFinite(unbridgedRetryMs) || unbridgedRetryMs <= 0) {
-        throw new Error(`createSnapshotStore：unbridgedRetryMs 必须是正的有限数，收到 ${unbridgedRetryMs}`);
+        throw new Error(`createSnapshotStore: unbridgedRetryMs must be a positive finite number, got ${unbridgedRetryMs}`);
     }
     let state = { ...(0, reducer_ts_1.emptyState)(), link: 'starting', message: null, scopeRepo: null, dataAt: 0 };
     const listeners = new Set();
@@ -461,13 +461,13 @@ function createSnapshotStore(options) {
             // 「流被缓冲 + 安全网也挂」的组合整整一天不可见（2026-10-07 教训）
             if (mode === 'safety' && !warnedSafety) {
                 warnedSafety = true;
-                console.warn(`[zcode-executor] 安全网 snapshot 拉取失败（流仍连着，中途输出可能不刷新）：${alarm.timedOut() ? `${firstResponseMs}ms 没等到响应` : describeError(err)}`);
+                console.warn(`[zcode-executor] safety-net snapshot fetch failed (stream still connected, interim output may not refresh): ${alarm.timedOut() ? `no response headers within ${firstResponseMs}ms` : describeError(err)}`);
             }
             if (mode === 'degraded') {
                 // 每次退化只提示一条：去重位拦住之后轮询周期的重复失败，别刷屏
                 if (!warnedDegraded) {
                     warnedDegraded = true;
-                    console.warn(`[zcode-executor] snapshot 轮询不可达，连接态转 down：${alarm.timedOut() ? `${firstResponseMs}ms 没等到响应` : describeError(err)}`);
+                    console.warn(`[zcode-executor] snapshot polling unreachable, link degraded to down: ${alarm.timedOut() ? `no response headers within ${firstResponseMs}ms` : describeError(err)}`);
                 }
                 noteTransportDown();
             }
@@ -492,7 +492,7 @@ function createSnapshotStore(options) {
         if (state.link === 'down' || state.link === 'failed')
             return;
         const before = state;
-        accept({ type: 'connection', link: 'down', message: '实时连接中断，正在重试' });
+        accept({ type: 'connection', link: 'down', message: 'Live connection lost, retrying' });
         if (state !== before)
             notify();
     };
@@ -575,7 +575,7 @@ function createSnapshotStore(options) {
                 return;
             if (!warnedDegraded) {
                 warnedDegraded = true;
-                console.warn(`[zcode-executor] 实时流连接失败，退化为 snapshot 轮询兜底：${alarm.timedOut() ? `${firstResponseMs}ms 没等到响应` : describeError(err)}`);
+                console.warn(`[zcode-executor] live stream connection failed, falling back to snapshot polling: ${alarm.timedOut() ? `no response headers within ${firstResponseMs}ms` : describeError(err)}`);
             }
         }
         finally {
@@ -677,11 +677,11 @@ exports.replyFold = replyFold;
 const RECENT_MS = 30 * 60 * 1000; // 结束 30 分钟内的会话在「已结束」里以卡片显示
 const DONE_LIMIT = 5;
 const OUTCOMES = {
-    done: { glyph: '✓', label: '已完成', color: 'success' },
-    timeout: { glyph: '◷', label: '已超时', color: 'warning' },
-    failed: { glyph: '✕', label: '执行失败', color: 'error' },
-    exited: { glyph: '✕', label: '执行失败', color: 'error' },
-    cancelled: { glyph: '–', label: '已取消', color: 'inactive' },
+    done: { glyph: '✓', label: 'done', color: 'success' },
+    timeout: { glyph: '◷', label: 'timed out', color: 'warning' },
+    failed: { glyph: '✕', label: 'failed', color: 'error' },
+    exited: { glyph: '✕', label: 'failed', color: 'error' },
+    cancelled: { glyph: '–', label: 'cancelled', color: 'inactive' },
 };
 const timeOf = (iso) => (iso ? Date.parse(iso) : NaN);
 /** 只留所属仓库等于 repo 的会话；repo 为 null（Claude 会话不在 git 仓库里）时全留。repo 为 null 的会话在过滤时隐藏。 */
@@ -696,29 +696,29 @@ function outcomeOf(session) {
     if (known)
         return known;
     if (session.phase === 'idle')
-        return { glyph: '○', label: '空闲', color: 'inactive' };
+        return { glyph: '○', label: 'idle', color: 'inactive' };
     if (session.lastOutcome === null || session.lastOutcome === undefined)
-        return { glyph: '–', label: '已退出', color: 'inactive' };
+        return { glyph: '–', label: 'exited', color: 'inactive' };
     return { glyph: '?', label: String(session.lastOutcome), color: 'inactive' };
 }
 /** 卡片标题的状态文案与配色；kind 告诉布局用哪种图标（pulse 脉冲、wait 转圈、其余用 glyph）。 */
 function headOf(session) {
     if (session.phase === 'stale')
-        return { kind: 'glyph', glyph: '⚠', label: '执行进程已中断', color: 'error' };
+        return { kind: 'glyph', glyph: '⚠', label: 'Runner interrupted', color: 'error' };
     if (session.phase === 'pending') {
         const p = session.pendingDetail;
         const label = p?.kind === 'question'
-            ? `挂起：提问 ${p.questionTexts?.length ?? 0} 条`
-            : `挂起：审批请求（${p?.toolName ?? '未知工具'}）`;
+            ? `Pending: question (${p.questionTexts?.length ?? 0})`
+            : `Pending: permission request (${p?.toolName ?? 'unknown tool'})`;
         return { kind: 'glyph', glyph: '⏸', label, color: 'warning' };
     }
     const q = session.offpeakQueue;
     if (session.phase === 'running' && q?.phase === 'queued') {
-        return { kind: 'wait', label: q.position === null || q.position === undefined ? '闲时排队中' : `闲时排队中，第 ${q.position} 位`, color: 'suggestion' };
+        return { kind: 'wait', label: q.position === null || q.position === undefined ? 'Waiting in the off-peak queue' : `Waiting in the off-peak queue, position ${q.position}`, color: 'suggestion' };
     }
     if (session.phase === 'running' && q?.phase === 'ready')
-        return { kind: 'wait', label: '闲时已就绪，等待开始', color: 'suggestion' };
-    return { kind: 'pulse', label: '执行中', color: 'success' };
+        return { kind: 'wait', label: 'Off-peak send ready, waiting to start', color: 'suggestion' };
+    return { kind: 'pulse', label: 'Running', color: 'success' };
 }
 /** 「N 分钟」「N 小时 M 分」；since 为空或解析不了给 null（卡片右上角就不显示）。 */
 function elapsed(since, now) {
@@ -727,10 +727,10 @@ function elapsed(since, now) {
         return null;
     const m = Math.max(0, Math.floor((now - t) / 60000));
     if (m < 1)
-        return '不到 1 分钟';
+        return 'under 1 min';
     if (m < 60)
-        return `${m} 分钟`;
-    return `${Math.floor(m / 60)} 小时 ${m % 60} 分`;
+        return `${m} min`;
+    return `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 /** 卡片右上角：执行中「已运行」、挂起「已等待」、排队「已排」、中断只写时长。 */
 function cornerOf(session, now) {
@@ -740,10 +740,10 @@ function cornerOf(session, now) {
     if (session.phase === 'stale')
         return span;
     if (session.phase === 'pending')
-        return `已等待 ${span}`;
+        return `Waiting ${span}`;
     if (headOf(session).kind === 'wait')
-        return `已排 ${span}`;
-    return `已运行 ${span}`;
+        return `Queued ${span}`;
+    return `Running ${span}`;
 }
 /**
  * 分三段：待处理（挂起、中断）、执行中（含闲时排队）、已结束（exited、idle）。
@@ -963,15 +963,15 @@ function endClockOf(iso) {
 }
 /** 结果 → 图标键：与 outcomeOf 的文案一一对应，认不出的按已退出画。 */
 function outcomeIconOf(outcome) {
-    if (outcome.label === '已完成')
+    if (outcome.label === 'done')
         return 'done';
-    if (outcome.label === '已超时')
+    if (outcome.label === 'timed out')
         return 'timeout';
-    if (outcome.label === '执行失败')
+    if (outcome.label === 'failed')
         return 'fail';
-    if (outcome.label === '已取消')
+    if (outcome.label === 'cancelled')
         return 'cancel';
-    if (outcome.label === '空闲')
+    if (outcome.label === 'idle')
         return 'idle';
     return 'exited';
 }
@@ -983,9 +983,9 @@ function outcomeAttrOf(outcome) {
         return 'timeout';
     if (outcome.color === 'error')
         return 'failed';
-    if (outcome.label === '空闲')
+    if (outcome.label === 'idle')
         return 'idle';
-    if (outcome.label === '已取消')
+    if (outcome.label === 'cancelled')
         return 'cancel';
     return 'exited';
 }
@@ -993,8 +993,8 @@ function outcomeAttrOf(outcome) {
 /** 宿主 MarkdownText 的探测结果与固定文案：模块加载时探测一次，labels 引用稳定（官方要求）。 */
 const HOST_MARKDOWN = (0, host_modules_ts_1.pickMarkdownText)((0, host_modules_ts_1.hostModules)());
 const MARKDOWN_LABELS = {
-    code: { copyLabel: '复制', copiedLabel: '已复制' },
-    footnotes: '脚注',
+    code: { copyLabel: 'Copy', copiedLabel: 'Copied' },
+    footnotes: 'Footnotes',
 };
 /** 行内记号的最小切分：反引号代码与加粗，其余原样。 */
 function renderInline(text, keyBase) {
@@ -1132,14 +1132,14 @@ function ReplyView(props) {
     if (!fold) {
         return ((0, jsx_runtime_1.jsx)("div", { className: "zxe-reply zxe-flat", children: (0, jsx_runtime_1.jsx)("div", { className: "zxe-full", children: (0, jsx_runtime_1.jsx)(MarkdownBody, { text: markdown }) }) }));
     }
-    return ((0, jsx_runtime_1.jsxs)("div", { className: open ? 'zxe-reply zxe-open' : 'zxe-reply', children: [(0, jsx_runtime_1.jsx)("div", { className: "zxe-peek", children: lines.map((line, i) => ((0, jsx_runtime_1.jsx)("p", { children: line }, i))) }), (0, jsx_runtime_1.jsx)("div", { className: "zxe-full", children: (0, jsx_runtime_1.jsx)(MarkdownBody, { text: markdown }) }), (0, jsx_runtime_1.jsx)("button", { className: "zxe-fold", type: "button", onClick: () => setOpen(!open), children: open ? '收起' : '展开回复' })] }));
+    return ((0, jsx_runtime_1.jsxs)("div", { className: open ? 'zxe-reply zxe-open' : 'zxe-reply', children: [(0, jsx_runtime_1.jsx)("div", { className: "zxe-peek", children: lines.map((line, i) => ((0, jsx_runtime_1.jsx)("p", { children: line }, i))) }), (0, jsx_runtime_1.jsx)("div", { className: "zxe-full", children: (0, jsx_runtime_1.jsx)(MarkdownBody, { text: markdown }) }), (0, jsx_runtime_1.jsx)("button", { className: "zxe-fold", type: "button", onClick: () => setOpen(!open), children: open ? 'Collapse' : 'Expand reply' })] }));
 }
 // ---- 工具行 ----
 /** 一行工具：▸ 正在执行（绿）/ ✓ 完成 / ✕ 失败；摘要超长省略。 */
 function ToolRow(props) {
     const bad = props.tool.ok === false;
     const cls = props.active ? 'zxe-tool zxe-active' : bad ? 'zxe-tool zxe-bad' : 'zxe-tool zxe-ok';
-    return ((0, jsx_runtime_1.jsxs)("div", { className: cls, children: [(0, jsx_runtime_1.jsx)("span", { className: "zxe-g", children: props.active ? '▸' : bad ? '✕' : '✓' }), (0, jsx_runtime_1.jsx)("span", { className: "zxe-tn", children: props.tool.toolName ?? '未知工具' }), typeof props.tool.summary === 'string' && props.tool.summary !== '' ? ((0, jsx_runtime_1.jsx)("span", { className: "zxe-ts zxe-mono", children: props.tool.summary })) : null] }));
+    return ((0, jsx_runtime_1.jsxs)("div", { className: cls, children: [(0, jsx_runtime_1.jsx)("span", { className: "zxe-g", children: props.active ? '▸' : bad ? '✕' : '✓' }), (0, jsx_runtime_1.jsx)("span", { className: "zxe-tn", children: props.tool.toolName ?? 'unknown tool' }), typeof props.tool.summary === 'string' && props.tool.summary !== '' ? ((0, jsx_runtime_1.jsx)("span", { className: "zxe-ts zxe-mono", children: props.tool.summary })) : null] }));
 }
 /** 执行中卡片的工具区：正在执行的一行 + 最近完成的至多五行（快照 recentTools 上限 5）；两者皆空则整块不画。 */
 function ToolsView(props) {
@@ -1164,19 +1164,19 @@ function PendingCard(props) {
         ? (p?.questionTexts ?? []).filter((t) => typeof t === 'string' && t !== '').join('\n')
         : (typeof p?.summary === 'string' ? p.summary : '');
     const reason = typeof p?.reason === 'string' && p.reason !== '' ? p.reason : null;
-    return ((0, jsx_runtime_1.jsxs)("article", { className: "zxe-card zxe-k-pend", children: [(0, jsx_runtime_1.jsx)(CardHead, { icon: (0, jsx_runtime_1.jsx)(icons_tsx_1.StatusIcon, { k: isQuestion ? 'question' : 'pause', size: 16 }), label: head.label, corner: (0, view_ts_1.cornerOf)(s, now) }), (0, jsx_runtime_1.jsx)("div", { className: "zxe-meta", children: metaOf(s) }), body !== '' ? ((0, jsx_runtime_1.jsxs)("div", { className: "zxe-pend-body", children: [(0, jsx_runtime_1.jsx)("pre", { className: "zxe-mono", children: body }), reason !== null ? (0, jsx_runtime_1.jsxs)("div", { className: "zxe-reason", children: ["\u539F\u56E0\uFF1A", reason] }) : null] })) : null, (0, jsx_runtime_1.jsx)(ReplyView, { s: s }), (0, jsx_runtime_1.jsx)("div", { className: "zxe-hint", children: "\u7531\u6D3E\u5355\u667A\u80FD\u4F53\u5728\u5BF9\u8BDD\u4E2D\u5904\u7406" })] }));
+    return ((0, jsx_runtime_1.jsxs)("article", { className: "zxe-card zxe-k-pend", children: [(0, jsx_runtime_1.jsx)(CardHead, { icon: (0, jsx_runtime_1.jsx)(icons_tsx_1.StatusIcon, { k: isQuestion ? 'question' : 'pause', size: 16 }), label: head.label, corner: (0, view_ts_1.cornerOf)(s, now) }), (0, jsx_runtime_1.jsx)("div", { className: "zxe-meta", children: metaOf(s) }), body !== '' ? ((0, jsx_runtime_1.jsxs)("div", { className: "zxe-pend-body", children: [(0, jsx_runtime_1.jsx)("pre", { className: "zxe-mono", children: body }), reason !== null ? (0, jsx_runtime_1.jsxs)("div", { className: "zxe-reason", children: ["Reason: ", reason] }) : null] })) : null, (0, jsx_runtime_1.jsx)(ReplyView, { s: s }), (0, jsx_runtime_1.jsx)("div", { className: "zxe-hint", children: "Handled by the dispatch agent in the conversation" })] }));
 }
 /** 中断卡片（待处理段）：回合没有正常收尾，重投或取消仍由派单智能体在对话里处理。 */
 function StaleCard(props) {
     const { s, now } = props;
-    return ((0, jsx_runtime_1.jsxs)("article", { className: "zxe-card zxe-k-stale", children: [(0, jsx_runtime_1.jsx)(CardHead, { icon: (0, jsx_runtime_1.jsx)(icons_tsx_1.StatusIcon, { k: "warn", size: 16 }), label: (0, view_ts_1.headOf)(s).label, title: headTitleOf(s), corner: (0, view_ts_1.cornerOf)(s, now) }), (0, jsx_runtime_1.jsx)("div", { className: "zxe-meta", children: metaOf(s) }), (0, jsx_runtime_1.jsx)(ReplyView, { s: s }), (0, jsx_runtime_1.jsx)("div", { className: "zxe-hint", children: "\u56DE\u5408\u6CA1\u6709\u6B63\u5E38\u6536\u5C3E\uFF1B\u91CD\u6295\u6216\u53D6\u6D88\u7531\u6D3E\u5355\u667A\u80FD\u4F53\u5728\u5BF9\u8BDD\u91CC\u5904\u7406" })] }));
+    return ((0, jsx_runtime_1.jsxs)("article", { className: "zxe-card zxe-k-stale", children: [(0, jsx_runtime_1.jsx)(CardHead, { icon: (0, jsx_runtime_1.jsx)(icons_tsx_1.StatusIcon, { k: "warn", size: 16 }), label: (0, view_ts_1.headOf)(s).label, title: headTitleOf(s), corner: (0, view_ts_1.cornerOf)(s, now) }), (0, jsx_runtime_1.jsx)("div", { className: "zxe-meta", children: metaOf(s) }), (0, jsx_runtime_1.jsx)(ReplyView, { s: s }), (0, jsx_runtime_1.jsx)("div", { className: "zxe-hint", children: "The turn did not end cleanly; resending or cancelling is handled by the dispatch agent in the conversation" })] }));
 }
 /** 闲时排队卡片（执行中段）：转弧动态图标 + 排位，就绪后文案换「闲时已就绪」。 */
 function QueueCard(props) {
     const { s, now } = props;
     const head = (0, view_ts_1.headOf)(s);
     const queued = s.offpeakQueue?.phase === 'queued';
-    return ((0, jsx_runtime_1.jsxs)("article", { className: "zxe-card zxe-k-queue", children: [(0, jsx_runtime_1.jsx)(CardHead, { icon: (0, jsx_runtime_1.jsx)(icons_tsx_1.QueueIcon, { size: 16 }), label: head.label, corner: (0, view_ts_1.cornerOf)(s, now) }), (0, jsx_runtime_1.jsxs)("div", { className: "zxe-meta", children: [[s.id, s.task, queued ? '等服务器放出闲时算力' : ''].filter((part) => typeof part === 'string' && part !== '').join(' · '), (0, jsx_runtime_1.jsx)("span", { className: "zxe-repotag", children: s.repo ? ` · ${repoNameOf(s.repo)}` : '' })] })] }));
+    return ((0, jsx_runtime_1.jsxs)("article", { className: "zxe-card zxe-k-queue", children: [(0, jsx_runtime_1.jsx)(CardHead, { icon: (0, jsx_runtime_1.jsx)(icons_tsx_1.QueueIcon, { size: 16 }), label: head.label, corner: (0, view_ts_1.cornerOf)(s, now) }), (0, jsx_runtime_1.jsxs)("div", { className: "zxe-meta", children: [[s.id, s.task, queued ? 'waiting for the server to release off-peak capacity' : ''].filter((part) => typeof part === 'string' && part !== '').join(' · '), (0, jsx_runtime_1.jsx)("span", { className: "zxe-repotag", children: s.repo ? ` · ${repoNameOf(s.repo)}` : '' })] })] }));
 }
 /** 执行中卡片：脉冲图标、回复（Markdown + 折叠）、正在执行与最近完成的工具。 */
 function RunningCard(props) {
@@ -1191,7 +1191,7 @@ function RecentCard(props) {
     // now 只为与其它卡片同构的 props 签名存在（已结束卡片没有时长角标）
     const { s, onCollapse } = props;
     const outcome = (0, view_ts_1.outcomeOf)(s);
-    return ((0, jsx_runtime_1.jsxs)("article", { className: "zxe-card zxe-k-recent", "data-outcome": outcomeAttrOf(outcome), children: [(0, jsx_runtime_1.jsx)(CardHead, { icon: (0, jsx_runtime_1.jsx)(icons_tsx_1.StatusIcon, { k: outcomeIconOf(outcome), size: 16 }), label: outcome.label, title: headTitleOf(s), corner: endClockOf(s.since) }), (0, jsx_runtime_1.jsxs)("div", { className: "zxe-meta", children: [metaOf(s), (0, jsx_runtime_1.jsx)("span", { className: "zxe-repotag", children: s.repo ? ` · ${repoNameOf(s.repo)}` : '' })] }), (0, jsx_runtime_1.jsx)(ReplyView, { s: s }), onCollapse !== undefined ? ((0, jsx_runtime_1.jsx)("button", { className: "zxe-fold", type: "button", onClick: onCollapse, children: "\u6536\u8D77" })) : null] }));
+    return ((0, jsx_runtime_1.jsxs)("article", { className: "zxe-card zxe-k-recent", "data-outcome": outcomeAttrOf(outcome), children: [(0, jsx_runtime_1.jsx)(CardHead, { icon: (0, jsx_runtime_1.jsx)(icons_tsx_1.StatusIcon, { k: outcomeIconOf(outcome), size: 16 }), label: outcome.label, title: headTitleOf(s), corner: endClockOf(s.since) }), (0, jsx_runtime_1.jsxs)("div", { className: "zxe-meta", children: [metaOf(s), (0, jsx_runtime_1.jsx)("span", { className: "zxe-repotag", children: s.repo ? ` · ${repoNameOf(s.repo)}` : '' })] }), (0, jsx_runtime_1.jsx)(ReplyView, { s: s }), onCollapse !== undefined ? ((0, jsx_runtime_1.jsx)("button", { className: "zxe-fold", type: "button", onClick: onCollapse, children: "Collapse" })) : null] }));
 }
 /** 已结束的一行（超出 30 分钟的）：图标 + 结果 + 标题 +（全部项目时的仓库名，repo 缺失回退 cwd）+ 时刻；点行展开成卡片。 */
 function EndedRow(props) {
@@ -1256,13 +1256,13 @@ function SummaryRow(props) {
     const dataClock = d
         ? `${twoDigits(d.getHours())}:${twoDigits(d.getMinutes())}:${twoDigits(d.getSeconds())}`
         : '--:--:--';
-    return ((0, jsx_runtime_1.jsxs)("div", { className: "zxe-summary", children: [chip('todo', 'zxe-c-todo', '待处理', counts.todo), chip('doing', 'zxe-c-doing', '执行中', counts.doing), chip('done', 'zxe-c-done', '已结束', counts.done), (0, jsx_runtime_1.jsxs)("span", { className: "zxe-live", "data-link": link, title: "\u300C\u6570\u636E\u300D\u662F\u6700\u540E\u4E00\u6B21\u6570\u636E\u5230\u8FBE\u7684\u65F6\u523B\uFF1A\u548C\u53F3\u4FA7\u8D70\u79D2\u7684\u672C\u5730\u949F\u5DEE\u8DDD\u53D8\u5927\uFF0C\u8BF4\u660E\u6570\u636E\u6D41\u505C\u683C", children: [(0, jsx_runtime_1.jsxs)("span", { className: "zxe-dclock", children: ["\u6570\u636E ", dataClock] }), (0, jsx_runtime_1.jsx)(icons_tsx_1.PulseIcon, { size: 12 }), (0, jsx_runtime_1.jsx)(LiveClock, {})] })] }));
+    return ((0, jsx_runtime_1.jsxs)("div", { className: "zxe-summary", children: [chip('todo', 'zxe-c-todo', 'Pending', counts.todo), chip('doing', 'zxe-c-doing', 'Running', counts.doing), chip('done', 'zxe-c-done', 'Ended', counts.done), (0, jsx_runtime_1.jsxs)("span", { className: "zxe-live", "data-link": link, title: '"Data" is when data last arrived: a widening gap against the ticking local clock on the right means the data stream has stalled', children: [(0, jsx_runtime_1.jsxs)("span", { className: "zxe-dclock", children: ["Data ", dataClock] }), (0, jsx_runtime_1.jsx)(icons_tsx_1.PulseIcon, { size: 12 }), (0, jsx_runtime_1.jsx)(LiveClock, {})] })] }));
 }
 /** 范围切换：本项目 / 全部项目（chip 态在 Body 自持）；旁注当前仓库名或「显示全部项目」。 */
 function ScopeBar(props) {
     const { scope, scopeRepo, onChange } = props;
-    const note = scope === 'all' ? '显示全部项目' : scopeRepo !== null ? (0, cards_tsx_1.repoNameOf)(scopeRepo) : '未识别当前项目，显示全部';
-    return ((0, jsx_runtime_1.jsxs)("div", { className: "zxe-scopebar", children: [(0, jsx_runtime_1.jsxs)("span", { className: "zxe-seg", role: "group", "aria-label": "\u663E\u793A\u8303\u56F4", children: [(0, jsx_runtime_1.jsx)("button", { type: "button", "aria-pressed": scope === 'proj', onClick: () => onChange('proj'), children: "\u672C\u9879\u76EE" }), (0, jsx_runtime_1.jsx)("button", { type: "button", "aria-pressed": scope === 'all', onClick: () => onChange('all'), children: "\u5168\u90E8\u9879\u76EE" })] }), (0, jsx_runtime_1.jsx)("span", { className: "zxe-scope-note", children: note })] }));
+    const note = scope === 'all' ? 'Showing all projects' : scopeRepo !== null ? (0, cards_tsx_1.repoNameOf)(scopeRepo) : 'Current project not identified; showing all';
+    return ((0, jsx_runtime_1.jsxs)("div", { className: "zxe-scopebar", children: [(0, jsx_runtime_1.jsxs)("span", { className: "zxe-seg", role: "group", "aria-label": "Scope", children: [(0, jsx_runtime_1.jsx)("button", { type: "button", "aria-pressed": scope === 'proj', onClick: () => onChange('proj'), children: "This project" }), (0, jsx_runtime_1.jsx)("button", { type: "button", "aria-pressed": scope === 'all', onClick: () => onChange('all'), children: "All projects" })] }), (0, jsx_runtime_1.jsx)("span", { className: "zxe-scope-note", children: note })] }));
 }
 /** 分段：吸顶标题（可被摘要行计数点跳过来）+ 计数 + 内容。 */
 function Section(props) {
@@ -1271,9 +1271,9 @@ function Section(props) {
 /** 断连 / 启动失败横幅的文案：down 用服务端带来的原因，failed 指向 execPath 配置。 */
 function bannerOf(state) {
     if (state.link === 'down')
-        return state.message ?? '实时连接中断，正在重连。重连完成前的变化不补提示。';
+        return state.message ?? 'Live connection lost, reconnecting. Changes made before reconnection completes are not replayed.';
     if (state.link === 'failed')
-        return state.message ?? 'watch 进程启动失败：请检查插件设置里的 execPath（zcode-executor 可执行文件路径）。';
+        return state.message ?? 'Failed to start the watch process: check execPath (the zcode-executor executable path) in the plugin settings.';
     return null;
 }
 /** 卡片选择：待处理段挂起 → PendingCard、中断 → StaleCard。 */
@@ -1327,13 +1327,13 @@ function Body(props) {
     const shownDone = sections.recent.length + sections.rows.length;
     const banner = bannerOf(state);
     const isEmptyPane = visible.length === 0;
-    return ((0, jsx_runtime_1.jsxs)("div", { className: "zxe-pane", "data-scope": scope, "data-link": state.link, children: [(0, jsx_runtime_1.jsx)(SummaryRow, { counts: sections.counts, link: state.link, dataAt: state.dataAt, onJump: jumpTo }), (0, jsx_runtime_1.jsxs)("div", { className: "zxe-scroll", children: [(0, jsx_runtime_1.jsx)(ScopeBar, { scope: scope, scopeRepo: state.scopeRepo, onChange: setScope }), banner !== null ? (0, jsx_runtime_1.jsx)("div", { className: "zxe-banner", children: banner }) : null, isEmptyPane ? ((0, jsx_runtime_1.jsx)("div", { className: "zxe-empty", children: "\u6CA1\u6709 zcode \u4F1A\u8BDD\u3002" })) : ((0, jsx_runtime_1.jsxs)(jsx_runtime_1.Fragment, { children: [(0, jsx_runtime_1.jsx)(Section, { title: "\u5F85\u5904\u7406", count: String(sections.counts.todo), innerRef: (el) => {
+    return ((0, jsx_runtime_1.jsxs)("div", { className: "zxe-pane", "data-scope": scope, "data-link": state.link, children: [(0, jsx_runtime_1.jsx)(SummaryRow, { counts: sections.counts, link: state.link, dataAt: state.dataAt, onJump: jumpTo }), (0, jsx_runtime_1.jsxs)("div", { className: "zxe-scroll", children: [(0, jsx_runtime_1.jsx)(ScopeBar, { scope: scope, scopeRepo: state.scopeRepo, onChange: setScope }), banner !== null ? (0, jsx_runtime_1.jsx)("div", { className: "zxe-banner", children: banner }) : null, isEmptyPane ? ((0, jsx_runtime_1.jsx)("div", { className: "zxe-empty", children: "No zcode sessions." })) : ((0, jsx_runtime_1.jsxs)(jsx_runtime_1.Fragment, { children: [(0, jsx_runtime_1.jsx)(Section, { title: "Pending", count: String(sections.counts.todo), innerRef: (el) => {
                                     sectionRefs.todo.current = el;
-                                }, isEmpty: sections.todo.length === 0, empty: "\u6CA1\u6709\u6302\u8D77\u7684\u56DE\u5408\u3002", children: (0, jsx_runtime_1.jsx)("div", { className: "zxe-cards", children: sections.todo.map((s) => ((0, jsx_runtime_1.jsx)(TodoCard, { s: s, now: now }, s.id))) }) }), (0, jsx_runtime_1.jsx)(Section, { title: "\u6267\u884C\u4E2D", count: String(sections.counts.doing), innerRef: (el) => {
+                                }, isEmpty: sections.todo.length === 0, empty: "No pending turns.", children: (0, jsx_runtime_1.jsx)("div", { className: "zxe-cards", children: sections.todo.map((s) => ((0, jsx_runtime_1.jsx)(TodoCard, { s: s, now: now }, s.id))) }) }), (0, jsx_runtime_1.jsx)(Section, { title: "Running", count: String(sections.counts.doing), innerRef: (el) => {
                                     sectionRefs.doing.current = el;
-                                }, isEmpty: sections.doing.length === 0, empty: "\u6CA1\u6709\u6267\u884C\u4E2D\u7684\u56DE\u5408\u3002", children: (0, jsx_runtime_1.jsx)("div", { className: "zxe-cards", children: sections.doing.map((s) => ((0, jsx_runtime_1.jsx)(DoingCard, { s: s, now: now }, s.id))) }) }), (0, jsx_runtime_1.jsx)(Section, { title: "\u5DF2\u7ED3\u675F", count: shownDone > 0 ? `最近 ${shownDone} 条` : '0', innerRef: (el) => {
+                                }, isEmpty: sections.doing.length === 0, empty: "No running turns.", children: (0, jsx_runtime_1.jsx)("div", { className: "zxe-cards", children: sections.doing.map((s) => ((0, jsx_runtime_1.jsx)(DoingCard, { s: s, now: now }, s.id))) }) }), (0, jsx_runtime_1.jsx)(Section, { title: "Ended", count: shownDone > 0 ? `last ${shownDone}` : '0', innerRef: (el) => {
                                     sectionRefs.done.current = el;
-                                }, isEmpty: shownDone === 0, empty: "\u8FD8\u6CA1\u6709\u7ED3\u675F\u7684\u56DE\u5408\u3002", children: (0, jsx_runtime_1.jsxs)(jsx_runtime_1.Fragment, { children: [sections.recent.length > 0 ? ((0, jsx_runtime_1.jsx)("div", { className: "zxe-cards", children: sections.recent.map((s) => ((0, jsx_runtime_1.jsx)(cards_tsx_1.RecentCard, { s: s, now: now }, s.id))) })) : null, sections.rows.length > 0 ? ((0, jsx_runtime_1.jsx)("div", { className: "zxe-rows", children: sections.rows.map((s) => expandedEnded.has(s.id) ? ((0, jsx_runtime_1.jsx)(cards_tsx_1.RecentCard, { s: s, now: now, onCollapse: () => toggleEnded(s.id) }, s.id)) : ((0, jsx_runtime_1.jsx)(cards_tsx_1.EndedRow, { s: s, now: now, onToggle: () => toggleEnded(s.id) }, s.id))) })) : null] }) })] }))] })] }));
+                                }, isEmpty: shownDone === 0, empty: "No ended turns yet.", children: (0, jsx_runtime_1.jsxs)(jsx_runtime_1.Fragment, { children: [sections.recent.length > 0 ? ((0, jsx_runtime_1.jsx)("div", { className: "zxe-cards", children: sections.recent.map((s) => ((0, jsx_runtime_1.jsx)(cards_tsx_1.RecentCard, { s: s, now: now }, s.id))) })) : null, sections.rows.length > 0 ? ((0, jsx_runtime_1.jsx)("div", { className: "zxe-rows", children: sections.rows.map((s) => expandedEnded.has(s.id) ? ((0, jsx_runtime_1.jsx)(cards_tsx_1.RecentCard, { s: s, now: now, onCollapse: () => toggleEnded(s.id) }, s.id)) : ((0, jsx_runtime_1.jsx)(cards_tsx_1.EndedRow, { s: s, now: now, onToggle: () => toggleEnded(s.id) }, s.id))) })) : null] }) })] }))] })] }));
 }
 };
 __modules["client/tab-def.js"] = function (require, module, exports) {
@@ -1346,8 +1346,8 @@ exports.missingServiceNote = missingServiceNote;
 exports.TAB_ID = 'zcode-executor:tasks';
 exports.TAB_KIND = 'zcode-executor:tasks';
 /** tab 标题与菜单条目文案。 */
-exports.TAB_TITLE = 'zcode 任务';
-exports.TAB_DESCRIPTION = '本机 zcode-executor 会话的实时观察面板';
+exports.TAB_TITLE = 'zcode tasks';
+exports.TAB_DESCRIPTION = 'Live watch pane for local zcode-executor sessions';
 /** guide 条目在菜单里的位置：排在宿主自己的条目（files/changes 等 10–30 段）之后。 */
 exports.TAB_GUIDE_ORDER = 50;
 /**
@@ -1381,7 +1381,7 @@ function tabDefinition(icon) {
 function missingServiceNote(registered) {
     if (registered)
         return null;
-    return '[dsh-zcode-executor] 到点仍未出现 sidebarRightTabs 服务（宿主版本过旧或仍在加载），右侧栏「zcode 任务」不挂载';
+    return '[dsh-zcode-executor] sidebarRightTabs service still absent after the timeout (host too old or still loading); the right-sidebar "zcode tasks" tab is not mounted';
 }
 };
 __modules["client/register-tab.js"] = function (require, module, exports) {
@@ -1411,7 +1411,7 @@ function registerTasksTab(ctx, store) {
         catch (error) {
             // register 抛错只 console 一行、不 rethrow：cordis 会吞掉 fiber 里的异常，rethrow 等于
             // 无声失败；标志也不翻真，与下方 slots.inject 的 rollback 防守同款
-            console.error('[dsh-zcode-executor] sidebarRightTabs.register 抛错，右侧栏「zcode 任务」不挂载', error);
+            console.error('[dsh-zcode-executor] sidebarRightTabs.register threw; the right-sidebar "zcode tasks" tab is not mounted', error);
             return;
         }
         registered = true;
@@ -1858,7 +1858,7 @@ async function routeScopeRepo(store, target, isCurrent) {
         if (!isCurrent())
             return;
         const message = error instanceof Error ? error.message : String(error);
-        console.warn(`[zcode-executor] 解析当前项目所属仓库失败，面板显示全部：${message}`);
+        console.warn(`[zcode-executor] failed to resolve the current project's repository; the pane shows all projects: ${message}`);
         store.setScopeRepo(null);
     }
 }
@@ -1870,7 +1870,7 @@ async function routeScopeRepo(store, target, isCurrent) {
 function apply(ctx) {
     // 构建号：真机排障用（宿主模块缓存按应用会话发旧 bundle，2026-10-07 连续两轮踩坑）——
     // devtools Console 里一眼核对跑的是哪版；改动记号见 git/构建时间，格式 YYYYMMDD-HHMM。
-    console.info('[zcode-executor] 面板构建 20261010-1200（插件桥：远程会话看主服务端任务）');
+    console.info('[zcode-executor] pane build 20261010-1200 (plugin bridge: remote sessions watch the main server tasks)');
     // 面板数据 store：每插件激活一份；start/stop 跟 fiber 走，状态不清（重载后面板保留旧数据
     // 直到流重连，重连首轮按基线对齐——归约器语义）。侧切换的清屏重开在 store.setSession 里。
     const store = (0, store_ts_1.createSnapshotStore)({ baseUrl: BASE_URL });

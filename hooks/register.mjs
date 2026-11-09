@@ -8,7 +8,7 @@ import { drawPane } from './pane.mjs';
 import { EMPTY_PANEL, applyLine, filterByRepo, startFailure } from './view.mjs';
 
 const PANE = 'zcode';
-const TITLE = 'zcode 任务';
+const TITLE = 'zcode tasks';
 const RESTART_MS = 5000; // watch 跑起来之后意外退出，多久重起
 const REDRAW_MS = 30000; // 让「已运行 N 分钟」走起来、让刚结束的卡片按时缩成一行
 const FRAME_MS = 250; // 终端转圈字符换帧
@@ -61,7 +61,7 @@ async function runWatch($, cwd) {
         try {
           msg = JSON.parse(line);
         } catch {
-          $.ui.log(`zcode-executor: watch 输出一行不是 JSON，跳过：${line.slice(0, 120)}`, { to: 'debug' });
+          $.ui.log(`zcode-executor: watch printed a line that is not JSON, skipping: ${line.slice(0, 120)}`, { to: 'debug' });
           continue;
         }
         if (msg.type === 'synced') synced = true;
@@ -80,8 +80,8 @@ async function keepWatching($, cwd) {
     await update($, panel, (p) => ({ ...p, link: 'failed', message: startFailure(stderr) }));
     return;
   }
-  const why = stderr ? `（${stderr.split('\n').pop()}）` : '';
-  await update($, panel, (p) => ({ ...p, link: 'down', synced: false, message: `实时连接中断${why}，${RESTART_MS / 1000} 秒后重连` }));
+  const why = stderr ? ` (${stderr.split('\n').pop()})` : '';
+  await update($, panel, (p) => ({ ...p, link: 'down', synced: false, message: `Live connection lost${why}, reconnecting in ${RESTART_MS / 1000} s` }));
   $.clock.after(RESTART_MS, () => void keepWatching($, cwd));
 }
 
@@ -106,7 +106,7 @@ export const register = (on, options) => {
   nodePath = options?.nodePath ?? '';
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'zcode', description: '打开 zcode 任务观察面板（实时刷新本项目的会话进展）' });
+    await $.command.register({ name: 'zcode', description: 'Open the zcode watch pane (live session progress for this project)' });
     await update($, panel, (p) => ({ ...p, synced: false, link: 'starting', message: null }));
     void keepWatching($, e.cwd);
     // 只让已画出的实例重画，面板没开时什么也不做
@@ -116,7 +116,7 @@ export const register = (on, options) => {
 
   on('command.run', { command: 'zcode' }, async ($) => {
     await $.ui.open({ id: PANE, title: TITLE });
-    return { text: 'zcode 观察面板已打开。' };
+    return { text: 'The zcode watch pane is open.' };
   });
 
   // Claude 投递时自动打开：不等面板、不改不拦，命令照常往下走

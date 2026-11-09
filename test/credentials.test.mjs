@@ -166,7 +166,7 @@ test('credentials：解不开（密钥不对）返回 {error}，error 里没有�
     env: { ZCODE_CREDENTIAL_SECRET: 'wrong-secret-entirely' },
   });
   assert.ok(out?.error, '应返回 error');
-  assert.match(out.error, /解不开|解密/);
+  assert.match(out.error, /decryption failed/);
 });
 
 test('credentials：缺 oauth:active_provider 返回 {error}', async () => {
@@ -178,13 +178,41 @@ test('credentials：缺 oauth:active_provider 返回 {error}', async () => {
   assert.match(out.error, /active_provider/);
 });
 
-test('credentials：user_info 缺 id 返回 {error}', async () => {
+test('credentials：user_info 缺 id → 从 plan key 键名反推账号 id（ZCode 0.17，StreamEmbedder 补丁）', async () => {
   const entries = fullEntries();
   entries['oauth:bigmodel:user_info'] = JSON.stringify({ username: 'no-id-here' });
   const file = await writeCredentials(entries);
   const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
+  assert.deepEqual(Object.keys(out).sort(), ['accountId', 'family', 'plans']);
+  assert.equal(out.family, 'bigmodel');
+  assert.equal(out.accountId, ACCOUNT_ID);
+  assert.equal(out.plans.individual, entries['account-provider:coding-plan:account:bigmodel-individual-coding-plan:account:10086:api-key']);
+  assert.equal(out.plans.team, entries['account-provider:coding-plan:account:bigmodel-team-coding-plan:account:10086:api-key']);
+});
+
+test('credentials：user_info 缺 id 且键名推不出来（连 plan key 都没有）→ 返回 {error}', async () => {
+  const entries = fullEntries();
+  entries['oauth:bigmodel:user_info'] = JSON.stringify({ username: 'no-id-here' });
+  for (const k of Object.keys(entries)) {
+    if (k.includes('coding-plan:account:')) delete entries[k];
+  }
+  const file = await writeCredentials(entries);
+  const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.ok(out?.error);
   assert.match(out.error, /id/);
+});
+
+test('credentials：user_info 缺 id、某把 plan 的候选键名不唯一 → 该把被跳过，不瞎选', async () => {
+  const entries = fullEntries();
+  entries['oauth:bigmodel:user_info'] = JSON.stringify({ username: 'no-id-here' });
+  // individual 出现两个不同 id 的候选键：不是恰好一个就不碰它；team 只有一个照常推
+  entries['account-provider:coding-plan:account:bigmodel-individual-coding-plan:account:99999:api-key'] = individualKey();
+  const file = await writeCredentials(entries);
+  const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
+  assert.deepEqual(Object.keys(out).sort(), ['accountId', 'family', 'plans']);
+  assert.equal(out.accountId, ACCOUNT_ID); // id 来自 team 那把键名
+  assert.equal(out.plans.individual, undefined);
+  assert.equal(out.plans.team, entries['account-provider:coding-plan:account:bigmodel-team-coding-plan:account:10086:api-key']);
 });
 
 test('credentials：四个键齐全 → family/accountId/plans 两把 key 都在，别的键不碰', async () => {
@@ -235,7 +263,7 @@ test('credentials：active_provider 解出别的值 → error 不带解出来的
   const file = await writeCredentials({ 'oauth:active_provider': odd });
   const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.ok(out?.error);
-  assert.match(out.error, /不是 zai 或 bigmodel/);
+  assert.match(out.error, /is not zai or bigmodel/);
   assert.equal(out.error.includes(odd), false); // 解出来的值一律不进面向人的文案
 });
 
@@ -292,7 +320,7 @@ test('闲时凭据：凭据文件不存在 → not-applicable，说没用账号�
   const file = path.join(os.tmpdir(), `zcode-cred-none-${Date.now()}.json`);
   const out = readOffPeakAuth({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.equal(out.kind, 'not-applicable');
-  assert.match(out.error, /登录/);
+  assert.match(out.error, /no account login/);
 });
 
 test('闲时凭据：没有 zcodejwttoken → not-applicable，说没用账号登录', async () => {
@@ -301,7 +329,7 @@ test('闲时凭据：没有 zcodejwttoken → not-applicable，说没用账号�
   const file = await writeCredentials(entries);
   const out = readOffPeakAuth({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.equal(out.kind, 'not-applicable');
-  assert.match(out.error, /登录/);
+  assert.match(out.error, /no account login/);
 });
 
 test('闲时凭据：没有账号信息（active_provider）→ not-applicable', async () => {
@@ -310,14 +338,14 @@ test('闲时凭据：没有账号信息（active_provider）→ not-applicable',
   const file = await writeCredentials(entries);
   const out = readOffPeakAuth({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.equal(out.kind, 'not-applicable');
-  assert.match(out.error, /登录/);
+  assert.match(out.error, /no account login/);
 });
 
 test('闲时凭据：只有团队版 key → not-applicable「团队版暂不支持闲时投递」', async () => {
   const file = await writeCredentials(offPeakEntries({ individual: false }));
   const out = readOffPeakAuth({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.equal(out.kind, 'not-applicable');
-  assert.match(out.error, /团队版暂不支持闲时投递/);
+  assert.match(out.error, /does not support the team plan/);
 });
 
 test('闲时凭据：两把 key 都没有 → not-applicable', async () => {
@@ -383,7 +411,7 @@ test('start plan 凭据：凭据文件不存在 → not-applicable，说没用�
   const file = path.join(os.tmpdir(), `zcode-cred-none-${Date.now()}.json`);
   const out = readStartPlanAuth({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.equal(out.kind, 'not-applicable');
-  assert.match(out.error, /登录/);
+  assert.match(out.error, /no account login/);
 });
 
 test('start plan 凭据：没有 active_provider → not-applicable', async () => {

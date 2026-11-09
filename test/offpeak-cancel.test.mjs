@@ -34,7 +34,7 @@ test('排号中 cancel：runner 停止轮询、结算当前号，投递以 cance
   await waitRunnerGone(s.runsDir);
   const last = lastJson(s);
   assert.equal(last.outcome, 'cancelled');
-  assert.equal(last.reason, '已被 cancel 叫停');
+  assert.equal(last.reason, 'stopped by cancel');
   assert.equal(last.text, '闲时的活');
   assert.deepEqual(resultsOf(s), ['cancelled']);
   assert.deepEqual(settledTickets(s), ['mock-ticket-1']);
@@ -78,8 +78,8 @@ test('runner 已死时 cancel（回合 exited 后）：CLI 直接结算号，写
   assert.deepEqual(settledTickets(s), []);
   const cancel = await runBin(s.env, ['cancel', s.entry.id]);
   assert.equal(cancel.status, 0, cancel.stderr);
-  assert.match(cancel.stdout, /runner 已不在/);
-  assert.match(cancel.stdout, /号 mock-ticket-1 已结算/);
+  assert.match(cancel.stdout, /runner is already gone/);
+  assert.match(cancel.stdout, /ticket mock-ticket-1 settled/);
   assert.equal(existsSync(path.join(s.runsDir, 'lock')), false, 'cancel 不该起 runner');
   assert.deepEqual(settledTickets(s), ['mock-ticket-1']);
   const last = lastJson(s);
@@ -103,8 +103,8 @@ test('runner 已死时 cancel、结算失败：只请求一次，号记进 unset
   trackPids(s.runsDir);
   const cancel = await runBin(s.env, ['cancel', s.entry.id]);
   assert.equal(cancel.status, 0, cancel.stderr);
-  assert.equal([...cancel.stderr.matchAll(/^cancel: 闲时号 mock-ticket-1 结算失败/gm)].length, 1, cancel.stderr);
-  assert.match(cancel.stdout, /结算失败/);
+  assert.equal([...cancel.stderr.matchAll(/^cancel: failed to settle off-peak ticket mock-ticket-1/gm)].length, 1, cancel.stderr);
+  assert.match(cancel.stdout, /settle failed/);
   assert.equal(settleRequests(s).length, 1, '不退避重试');
   const op = offpeakJson(s);
   assert.equal(op.phase, 'done');
@@ -163,7 +163,7 @@ test('孤儿号结算失败：stderr 一行，照样取新号开跑', async (t) 
   const r = await runBin(s.env, ['send', s.entry.id, '新的活', '--offpeak', '--wait', '--json']);
   trackPids(s.runsDir);
   assert.equal(r.status, 0, r.stderr);
-  assert.equal([...r.stderr.matchAll(new RegExp(`^send: 闲时号 ${ticket.ticket_id} 结算失败`, 'gm'))].length, 1, r.stderr);
+  assert.equal([...r.stderr.matchAll(new RegExp(`^send: failed to settle off-peak ticket ${ticket.ticket_id}`, 'gm'))].length, 1, r.stderr);
   await waitRunnerGone(s.runsDir);
   assert.equal(takeRequests(s).length, 2);
   await assertNoSecrets(s, [r.stdout, r.stderr]);

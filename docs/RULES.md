@@ -24,15 +24,15 @@
   question、gate、hard rule、review（模型审批）、pending、tier、thoughtLevel。
 - 不要出现 judge、verdict（模型审批的结果叫 review result）、run（会话目录叫 `runs/` 是历史沿用，代码里
   不造 Run 概念）、prompt（指投递用 send，指提示词用 promptText）。
-- 面向人的输出写中文；标识符、事件类型、JSON 字段名写英文。
+- 面向人的输出写英文（decisions D26）；标识符、事件类型、JSON 字段名写英文。
 
 ## 3. 代码风格
 
 - 两个空格缩进，单引号，句末分号。行宽不设硬数字，一行说一件事、别让人横向滚动。不引入格式化工具；提交前跑 `node --check`。
 - 优先 `export function`，模块顶层不放会产生副作用的语句（读文件、起进程）。
 - 不用 `default export`。
-- 错误统一一个 `ExecutorError`，带 `exitCode`。抛错信息写中文、说清怎么办（「会话不在登记簿里，用
-  `zcode-executor list` 看有哪些」），不写堆栈式短语。
+- 错误统一一个 `ExecutorError`，带 `exitCode`。抛错信息写英文、说清怎么办（`session not in the registry;
+  run \`zcode-executor list\` to see which ones exist`），不写堆栈式短语。
 - 不吞错误。捕获了不处理的一律 rethrow；确实要忽略的写一行注释说为什么可以忽略。
 - JSON-RPC 错误记 `error.data.details`，`message` 只有一句概括，不够排障。
 - 异步一律 `async` / `await`，不混 `.then`。子进程和文件的等待都要有超时。
@@ -52,7 +52,7 @@
 - stdout 只放结果：人读的摘要，或 `--json` 时一个 JSON 对象一行。进度、警告、`--stream` 都走 stderr。
 - 输出一律经 `process.stdout` / `process.stderr`（`console.*` 也是）：入口给这两个流包了一层，把终端控制字符换成字面的 `\uXXXX`（`lib/cli/terminal.mjs`）——
   工具名、理由、模型回复、文件名都是执行端可控的文本。别绕开它直接写 fd（`fs.writeSync(1, …)`、`stdio: 'inherit'` 的子进程）。
-- 每条 stderr 信息一行，以命令名或阶段开头：`new: cwd 不是 worktree，照常建`。
+- 每条 stderr 信息一行，以命令名或阶段开头：`new: cwd is not a worktree, creating anyway`。
 - `--json` 的结构只加字段不删字段、不改字段含义。改了就在 PRD 第 4 节同步。
 - 退出码表固定为 0 / 1 / 2 / 3 / 4 / 5，含义见 PRD。新情况归入既有码，不加新码。
 
@@ -104,7 +104,7 @@
 - 每个外部行为一个用例，用例名写行为不写实现：「白名单外的 cwd 退出码 2」。
 - 断言三样：退出码、stdout 的 JSON、落盘文件和 mock 的记录文件。不断言内部函数被调了几次。
 - 只对 `test/mock-appserver.mjs` 与 `test/mock-offpeak.mjs`（闲时服务）跑。`npm test` 任何情况下不碰真机、不花额度。
-- 真机脚本放 `scripts/`，名字带 `real-`；会花额度的脚本跑前打印「这次会花额度」并要求 `--yes`。
+- 真机脚本放 `scripts/`，名字带 `real-`；会花额度的脚本跑前打印 `this will spend quota` 并要求 `--yes`。
 - 起了后台进程的用例在 `after()` 里统一 SIGKILL，包括子进程的子进程；mock 靠 stdin EOF 自灭。
 - 测试用的剧本 JSON 就近放在用例里，不建 fixtures 目录。
 - 改协议层行为时先改 mock 再改客户端，让 mock 一直是「真机行为的复刻」，剧本字段注明对应的真机事实。
@@ -112,8 +112,8 @@
 ## 10. 提交
 
 - 一件任务一到几个提交，每个提交能独立跑过 `npm test`。
-- 提交信息中文，首行 `<范围>: <做了什么>`，范围用层名或命令名：`协议: 反向请求按 requestId 去重`、
-  `send: --wait 超时改为发 session/stop`。正文写为什么，不复述 diff。
+- 提交信息英文（D26），首行 `<scope>: <what>`，范围用层名或命令名：`protocol: deduplicate reverse requests by requestId`、
+  `send: --wait timeout now sends session/stop`。正文写为什么，不复述 diff。
 - 不提交 `runs/`、`worktrees/`、日志、临时目录。
 - 主分支上直接开发；派给执行端的任务在 `task/T-<编号>` 分支上做，验收后合并。
 

@@ -127,13 +127,13 @@ test('new：白名单外退出码 2，stderr 列出允许的根目录', async ()
   dirs.push(outside);
   const run = runNew(env, ['--cwd', outside]);
   assert.equal(run.status, 2, `stderr: ${run.stderr}`);
-  assert.match(run.stderr, /不在白名单/);
-  assert.match(run.stderr, /允许的根目录/);
+  assert.match(run.stderr, /not in the allowed roots/);
+  assert.match(run.stderr, /Allowed roots:/);
   assert.ok(run.stderr.includes(env.workParent));
   // 不存在的 cwd 是退出码 1（T2.2b 第 1 条：先查存在再查白名单）
   const missing = runNew(env, ['--cwd', '/nonexistent/xyz']);
   assert.equal(missing.status, 1, missing.stderr);
-  assert.match(missing.stderr, /cwd 不存在/);
+  assert.match(missing.stderr, /cwd does not exist/);
 });
 
 test('new：白名单内通过，本地 id、sessionId 为 null、--json 与登记簿一致（D13）', async (t) => {
@@ -167,14 +167,14 @@ test('new：非 worktree 只警告不拒；worktree 时 isWorktree:true', async 
   const plain = await setupNew();
   const run = runNew(plain, ['--cwd', plain.cwd, '--json']);
   assert.equal(run.status, 0, `stderr: ${run.stderr}`);
-  assert.match(run.stderr, /new: cwd 不是 worktree，照常建/);
+  assert.match(run.stderr, /new: cwd is not a worktree, creating anyway/);
   assert.equal(JSON.parse(run.stdout).isWorktree, false);
   assert.equal(JSON.parse(run.stdout).repoRoot, null, '非 worktree 不记原仓库：执行端改的就是它');
 
   const wt = await setupNew({ worktree: true });
   const runWt = runNew(wt, ['--cwd', wt.cwd, '--json']);
   assert.equal(runWt.status, 0, `stderr: ${runWt.stderr}`);
-  assert.doesNotMatch(runWt.stderr, /不是 worktree/);
+  assert.doesNotMatch(runWt.stderr, /is not a worktree/);
   assert.equal(JSON.parse(runWt.stdout).isWorktree, true);
   assert.equal(JSON.parse(runWt.stdout).repoRoot, realpathSync(path.join(wt.workParent, 'repo')), 'worktree 时记下原仓库根，闸门从这里读项目文档');
 });
@@ -216,7 +216,7 @@ test('new：--thought 显式不合法 → 退 2 并列出档位；合法则登�
   const bad = runNew(env, ['--cwd', env.cwd, '--tier', 'strong', '--thought', 'nope']);
   assert.equal(bad.status, 2, `stderr: ${bad.stderr}`);
   assert.match(bad.stderr, /nope/);
-  assert.match(bad.stderr, /low、high、max/); // 列出合法档位
+  assert.match(bad.stderr, /low, high, max/); // 列出合法档位
 });
 
 test('new：模型没有 high 时登记 thoughtLevel 为 null，runner 建会话时再按模型默认档回落（见 run.test）', async () => {
@@ -279,7 +279,7 @@ test('new：人读输出一行本地 id 开头（D13）', async () => {
   const env = await setupNew();
   const run = runNew(env, ['--cwd', env.cwd, '--title', 't']);
   assert.equal(run.status, 0, `stderr: ${run.stderr}`);
-  assert.match(run.stdout.trim(), /^new: x_[0-9a-f]{8} \S+\/\S+ 思考 \S+ \S/);
+  assert.match(run.stdout.trim(), /^new: x_[0-9a-f]{8} \S+\/\S+ thought \S+ \S/);
 });
 
 // ---------- repo（所属仓库，SPEC-watch-pane C）----------
@@ -417,7 +417,7 @@ test('doctor：正常 → 退出码 0，--json 里有内置文件、apiKey 在�
   assert.equal(out.handshake.tiers.strong.modelId, 'GLM-5.3');
   // registry.warnings 并进来了：只有一条「credentials.json 不存在」的未登录提醒
   assert.equal(out.handshake.warnings.length, 1);
-  assert.match(out.handshake.warnings[0], /credentials\.json 不存在/);
+  assert.match(out.handshake.warnings[0], /credentials\.json does not exist/);
 });
 
 test('doctor：配置 review.jev.apiKey 时只报告已配置与新 runner 使用 Jev，不泄漏密钥', async () => {
@@ -437,7 +437,7 @@ test('doctor：配置 review.jev.apiKey 时只报告已配置与新 runner 使�
     executorConfig: { review: { jev: { apiKey: secret } } },
   });
   assert.equal(plain.run.status, 0, `stderr: ${plain.run.stderr}`);
-  assert.match(plain.run.stdout, /Jev 前筛 → ZCode 快筛 → 慢判/);
+  assert.match(plain.run.stdout, /Jev pre-screen → ZCode fast screen → slow review/);
   assert.equal(`${plain.run.stdout}${plain.run.stderr}`.includes(secret), false);
 });
 
@@ -470,8 +470,8 @@ test('doctor：review.enabled:false 报模型审批关闭，不误报会使用 J
     executorConfig: { review: { enabled: false, jev: { apiKey: secret } } },
   });
   assert.equal(plain.run.status, 0, `stderr: ${plain.run.stderr}`);
-  assert.match(plain.run.stdout, /模型审批：关闭/);
-  assert.doesNotMatch(plain.run.stdout, /将使用 Jev|将使用 ZCode/);
+  assert.match(plain.run.stdout, /model review: off/);
+  assert.doesNotMatch(plain.run.stdout, /will use Jev|will use ZCode/);
   assert.equal(`${plain.run.stdout}${plain.run.stderr}`.includes(secret), false);
 });
 
@@ -490,14 +490,14 @@ test('doctor：人读输出——① 一行、② 账号型与 config.json 两�
   assert.equal(run.status, 0, `stderr: ${run.stderr}`);
   const lines = run.stdout.split('\n').filter((l) => l.trim());
   assert.equal(lines.length, 7); // T6-C 起 ② 拆成账号型 + config.json 两行，选中单独一行；OP3 加 ⑤ 闲时一行
-  assert.match(lines[0], /doctor ① zcode：版本 0\.16\.5，内置 provider 文件 /);
+  assert.match(lines[0], /doctor ① zcode: version 0\.16\.5, builtin provider file /);
   assert.ok(lines[0].includes(mock.env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE), lines[0]);
-  assert.match(lines[1], /doctor ② 账号型 coding plan：未登录（credentials\.json 不存在）/);
-  assert.match(lines[2], /doctor ② config\.json：2 个可用 provider（备用来源）/);
-  assert.match(lines[3], /doctor ② 选中 builtin:bigmodel-coding-plan（apiKey 在）/);
-  assert.match(lines[4], /doctor ③ 握手：选中 builtin:bigmodel-coding-plan/);
-  assert.match(lines[5], /doctor ④ 模型审批：开启，新启动 runner 将使用 ZCode 快筛/);
-  assert.match(lines[6], /doctor ⑤ 闲时：不适用（没找到 ZCode 凭据文件/); // 夹具没登录，不碰闲时服务器
+  assert.match(lines[1], /doctor ② account coding plan: not signed in \(credentials\.json does not exist\)/);
+  assert.match(lines[2], /doctor ② config\.json: 2 available provider\(s\) \(fallback source\)/);
+  assert.match(lines[3], /doctor ② picked builtin:bigmodel-coding-plan \(apiKey present\)/);
+  assert.match(lines[4], /doctor ③ handshake: picked builtin:bigmodel-coding-plan/);
+  assert.match(lines[5], /doctor ④ model review: on, newly started runners will use ZCode fast screen/);
+  assert.match(lines[6], /doctor ⑤ off-peak: not applicable \(ZCode credentials file not found/); // 夹具没登录，不碰闲时服务器
 });
 
 test('doctor：选中的 provider 没有明文 apiKey → ② 先报「apiKey 不在」，③ 失败，退出码 1（断粮预警）', async () => {
@@ -513,7 +513,7 @@ test('doctor：选中的 provider 没有明文 apiKey → ② 先报「apiKey �
   assert.equal(out.config.ok, true); // 文件本身读得到
   assert.equal(out.config.apiKeyPresent, false);
   assert.equal(out.handshake.ok, false);
-  assert.match(run.stderr, /没有明文 apiKey/);
+  assert.match(run.stderr, /has no plaintext apiKey/);
 });
 
 test('doctor：zcode config 读不到 → 退出码 1，stderr 报路径，第三步跳过', async () => {
@@ -555,9 +555,9 @@ test('doctor：只有 credentials.json、没有 config.json → ② 报已登录
   const plain = await runCli(['doctor'], { configPath: missingConfig, credentials: {} });
   assert.equal(plain.run.status, 0, `stderr: ${plain.run.stderr}`);
   const lines = plain.run.stdout.split('\n').filter((l) => l.trim());
-  assert.match(lines[1], /doctor ② 账号型 coding plan：已登录（bigmodel，个人版 key 在、团队版 key 在）/);
-  assert.match(lines[2], /doctor ② config\.json：读不到（/);
-  assert.match(lines[3], /doctor ② 选中 account:bigmodel-individual-coding-plan（apiKey 在）/);
+  assert.match(lines[1], /doctor ② account coding plan: signed in \(bigmodel, individual key present, team key present\)/);
+  assert.match(lines[2], /doctor ② config\.json: cannot be read \(/);
+  assert.match(lines[3], /doctor ② picked account:bigmodel-individual-coding-plan \(apiKey present\)/);
   for (const key of Object.values(plain.mock.accountKeys)) {
     assert.equal(plain.run.stdout.includes(key), false);
     assert.equal(plain.run.stderr.includes(key), false);
@@ -607,7 +607,7 @@ test('models：人读输出分组列出，选中的 provider 带 ✓，模型带
   assert.match(run.stdout, /builtin:bigmodel-coding-plan ✓/);
   assert.match(run.stdout, /builtin:bigmodel\n/);
   assert.match(run.stdout, /★fast\s+GLM-5\.3-Flash/);
-  assert.match(run.stdout, /★strong\s+GLM-5\.3\s+GLM 5\.3\s+思考等级: low\/high\/max/);
+  assert.match(run.stdout, /★strong\s+GLM-5\.3\s+GLM 5\.3\s+thought levels: low\/high\/max/);
 });
 
 test('doctor 与 models 零 token：doctor 只有 deferred create + close，models 不起子进程（评审 T2.1b 第 5 条）', async () => {
@@ -625,8 +625,8 @@ test('doctor 与 models 零 token：doctor 只有 deferred create + close，mode
 test('未知子命令：退出码 1 并列出可用命令', () => {
   const run = spawnSync(process.execPath, [BIN, 'bogus'], { encoding: 'utf8' });
   assert.equal(run.status, 1);
-  assert.match(run.stderr, /不认识的命令 bogus/);
-  assert.match(run.stderr, /doctor、models/);
+  assert.match(run.stderr, /unknown command bogus/);
+  assert.match(run.stderr, /doctor, models/);
 });
 
 // ---------- T2.2b：白名单 realpath、并发登记簿、参数校验 ----------
@@ -649,7 +649,7 @@ test('new：兄弟目录不误伤——<parent>/x 在白名单，<parent>/x-evil
   assert.equal(good.status, 0, good.stderr); // <parent>/x 本身放行
   const evil = spawnSync(process.execPath, [BIN, 'new', '--cwd', path.join(parent, 'x-evil'), '--json'], { encoding: 'utf8', env, timeout: 60_000 });
   assert.equal(evil.status, 2, evil.stderr); // 前缀相同但没有分隔符边界：拒
-  assert.match(evil.stderr, /不在白名单/);
+  assert.match(evil.stderr, /not in the allowed roots/);
 });
 
 test('new：白名单内的符号链接解析到外部 → 退出码 2（评审 T2.2b 第 2 条）', async () => {
@@ -668,7 +668,7 @@ test('new：白名单内的符号链接解析到外部 → 退出码 2（评审 
   const env = { ...process.env, ZCODE_BIN: mock.zcodePath, ZCODE_EXECUTOR_HOME: home, ZCODE_CONFIG_PATH: await writeZcodeConfig(), ...mock.env };
   const run = spawnSync(process.execPath, [BIN, 'new', '--cwd', path.join(link, 'repo')], { encoding: 'utf8', env, timeout: 60_000 });
   assert.equal(run.status, 2, run.stderr); // realpath 之后指向外部：拒
-  assert.match(run.stderr, /不在白名单/);
+  assert.match(run.stderr, /not in the allowed roots/);
 });
 
 test('new：/tmp 与 /private/tmp 两种写法都通（realpath 归一，评审 T2.2b 第 1 条）', { skip: process.platform === 'win32' && '验的是 /tmp 这类符号链接的归一，Windows 没有 /tmp' }, async () => {
@@ -702,7 +702,7 @@ test('new：--tier 非法 → 退出码 2（PRD 表，评审 T2.2b 第 7 条）'
   const env = await setupNew();
   const run = runNew(env, ['--cwd', env.cwd, '--tier', 'turbo']);
   assert.equal(run.status, 2, `stderr: ${run.stderr}`);
-  assert.match(run.stderr, /只能是 fast 或 strong/);
+  assert.match(run.stderr, /must be fast or strong/);
 });
 
 test('new：--provider 给错 → 退出码 2 且不起任何子进程（评审 T2.2b 第 6 条）', async () => {
@@ -806,7 +806,7 @@ test('send --steer：state.steerUnavailable 非空且 phase running → 退出�
     timeout: 60_000,
   });
   assert.equal(run.status, 2, `stdout: ${run.stdout} stderr: ${run.stderr}`);
-  assert.match(run.stderr, /插话路径不可用/);
+  assert.match(run.stderr, /steer path is unavailable/);
   assert.match(run.stderr, /already running/);
   // 拒绝就不入队：队列目录里没有待投递（runner 也没被拉起）
   const queue = await readdir(path.join(env.home, 'runs', env.entry.id, 'queue')).catch(() => []);
@@ -830,7 +830,7 @@ test('status --json 带 steerUnavailable 字段（字符串或 null），文本�
     env: marked.spawnEnv,
     timeout: 60_000,
   });
-  assert.match(textRun.stdout, /插话: 不可用（.*already running/);
+  assert.match(textRun.stdout, /steer: unavailable \(.*already running/);
 
   const clean = await setupSessionWithState(t, { phase: 'idle' });
   const cleanRun = spawnSync(process.execPath, [BIN, 'status', clean.entry.id, '--json'], {
@@ -839,5 +839,5 @@ test('status --json 带 steerUnavailable 字段（字符串或 null），文本�
     timeout: 60_000,
   });
   assert.equal(JSON.parse(cleanRun.stdout).steerUnavailable, null);
-  assert.doesNotMatch(cleanRun.stdout, /插话/);
+  assert.doesNotMatch(cleanRun.stdout, /steer: unavailable/);
 });

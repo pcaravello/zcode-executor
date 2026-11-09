@@ -20,15 +20,15 @@ import { createReview } from '../lib/review/run.mjs';
 
 const note = (msg) => process.stderr.write(`real-review: ${msg}\n`);
 
-note('这次会花额度：三级链最多 1 次 Jev 逻辑调用（含重试）及 0-2 次 ZCode workspace/generateText（先快筛、必要时慢判）；本脚本固定 Write 本地 skip，0 次 Jev 请求，不是 Jev HTTP 性能测量');
+note('this will spend quota: the three-stage chain makes at most 1 Jev logical call (retries included) and 0-2 ZCode workspace/generateText calls (fast screen first, slow review when needed); this script always uses a local-skip Write, so 0 Jev requests — it is not a Jev HTTP performance measurement');
 if (!process.argv.includes('--yes')) {
-  note('确认要跑就加 --yes');
+  note('add --yes to confirm');
   process.exit(1);
 }
 
 const config = loadConfig();
 if (config.review.enabled === false) {
-  note('review.enabled:false，拒绝运行模型审批；未启动 ZCode，也未发起付费请求');
+  note('review.enabled:false; refusing to run model review; ZCode was not started and no paid request was made');
   process.exit(1);
 }
 const { configPath, registry } = loadZcodeConfig();
@@ -36,8 +36,8 @@ const provider = pickProvider(registry, { preferredProvider: config.preferredPro
 // resolveReviewSelection 按 fast 档 + review.thought 选模型，直接给出 D14 的 selection 形状
 // （{providerId: EXECUTOR_PROVIDER_ID, modelId, options?}），不用再自己转换
 const { selection } = resolveReviewSelection({ registry, providerId: provider.providerId, config });
-note(`zcode 配置 ${configPath}，provider ${provider.providerId}，selection ${JSON.stringify(selection)}`);
-note('querySource 固定 zcode-executor.review；思考等级走 selection.options.reasoningLevel（D14）');
+note(`zcode config ${configPath}, provider ${provider.providerId}, selection ${JSON.stringify(selection)}`);
+note('querySource is fixed to zcode-executor.review; the thought level goes through selection.options.reasoningLevel (D14)');
 
 const cwd = process.cwd();
 const workspace = { workspacePath: cwd, workspaceKey: cwd };
@@ -46,7 +46,7 @@ const secrets = [apiKey].filter(Boolean);
 // D14：不再推表，改写一份个人 provider 文件给 app-server 自己读；apiKey 只经这个临时文件和
 // requestProviderRuntimeHeaders 的应答传出去，finally 里 dispose
 const providerAuth = (providerId) => {
-  note(`[反向请求] requestProviderRuntimeHeaders providerId=${providerId ?? '(缺 providerId)'}`);
+  note(`[reverse request] requestProviderRuntimeHeaders providerId=${providerId ?? '(missing providerId)'}`);
   return providerId === EXECUTOR_PROVIDER_ID ? apiKey : undefined;
 };
 // 写文件和 spawn 都在 try 里：spawn 拉不起来（内置文件找不到等）时 finally 照样删掉带密钥的临时文件
@@ -87,8 +87,8 @@ try {
   const result = await review(action, ctx);
   for (const [index, raw] of raws.entries()) {
     // 只打筛选后的调用指标，不打印完整模型原文或 Jev state，避免任务单和工具参数进入终端历史。
-    const stageName = index === 0 ? '快筛' : '慢判';
-    note(`第 ${index + 1} 次 ZCode 调用（${stageName}，maxOutputTokens=${raw.maxOutputTokens}，${raw.durationMs}ms，usage ${JSON.stringify(raw.usage ?? null)}）`);
+    const stageName = index === 0 ? 'fast screen' : 'slow review';
+    note(`ZCode call ${index + 1} (${stageName}, maxOutputTokens=${raw.maxOutputTokens}, ${raw.durationMs}ms, usage ${JSON.stringify(raw.usage ?? null)})`);
   }
   process.stdout.write(
     `${JSON.stringify({
@@ -119,7 +119,7 @@ try {
   try {
     await client?.close();
   } catch (err) {
-    note(`收场失败：${err?.message ?? err}`);
+    note(`close failed: ${err?.message ?? err}`);
   }
   // D14：个人 provider 文件用完即删
   personalFile?.dispose();

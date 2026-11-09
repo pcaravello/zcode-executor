@@ -135,7 +135,7 @@ test('红线命中：Write 到 cwd 外 → 不调 generateText，pending 带 sta
   await settlePending(env, (pending) => {
     assert.equal(pending.stage, 'hard');
     assert.equal(pending.ruleId, 'outside-worktree');
-    assert.match(pending.why, /执行副本之外/);
+    assert.match(pending.why, /reaching outside the worktree/);
   });
   assert.equal(generateTexts(env.recordPath).length, 0, '红线命中不许调模型');
   const hard = gateEvents(env.runsDir).find((e) => e.stage === 'hard');
@@ -176,7 +176,7 @@ test('快筛 pass：自动应答 allow、不落 pending、事件 review-fast，s
 test('快筛 flag + 慢判 allow：两次调用，事件 review-slow allow', async (t) => {
   const env = await setupReview(t, {
     script: {
-      generateText: { replies: ['N', '结论: allow | 规则: none | 理由: 日常工作'] },
+      generateText: { replies: ['N', 'Conclusion: allow | Rule: none | Reason: day-to-day work'] },
       turns: [{ permission: PERM_INSIDE() }],
     },
   });
@@ -185,14 +185,14 @@ test('快筛 flag + 慢判 allow：两次调用，事件 review-slow allow', asy
   const gateEvent = gateEvents(env.runsDir).at(-1);
   assert.equal(gateEvent.stage, 'review-slow');
   assert.equal(gateEvent.decision, 'allow');
-  assert.match(gateEvent.reason, /日常工作/);
+  assert.match(gateEvent.reason, /day-to-day work/);
   assert.equal(generateTexts(env.recordPath).length, 2);
 });
 
 test('慢判 deny：挂起转人工（why 是模型理由、ruleId 带上），退 5', async (t) => {
   const env = await setupReview(t, {
     script: {
-      generateText: { replies: ['N', '结论: deny | 规则: cred-exfil | 理由: 凭据外发'] },
+      generateText: { replies: ['N', 'Conclusion: deny | Rule: cred-exfil | Reason: credentials leaving the machine'] },
       turns: [{ permission: PERM_INSIDE() }],
     },
   });
@@ -201,7 +201,7 @@ test('慢判 deny：挂起转人工（why 是模型理由、ruleId 带上），�
   await settlePending(env, (pending) => {
     assert.equal(pending.stage, 'review-slow');
     assert.equal(pending.ruleId, 'cred-exfil');
-    assert.match(pending.why, /凭据外发/);
+    assert.match(pending.why, /credentials leaving the machine/);
   });
 });
 
@@ -216,7 +216,7 @@ test('慢判垃圾文本：挂起 stage review-failed', async (t) => {
   assert.equal(run.status, 5, `stdout: ${run.stdout} stderr: ${run.stderr}`);
   await settlePending(env, (pending) => {
     assert.equal(pending.stage, 'review-failed');
-    assert.match(pending.why, /解析失败/);
+    assert.match(pending.why, /conclusion line parse failed/);
   });
 });
 
@@ -248,7 +248,7 @@ test('generateText 超时：先发 cancelGenerateText，再挂起 review-failed'
   assert.equal(run.status, 5, `stdout: ${run.stdout} stderr: ${run.stderr}`);
   await settlePending(env, (pending) => {
     assert.equal(pending.stage, 'review-failed');
-    assert.match(pending.why, /超时/);
+    assert.match(pending.why, /timed out waiting for workspace\/generateText/);
   });
   const methods = readRecord(env.recordPath).map((m) => m.method);
   assert.ok(methods.includes('workspace/cancelGenerateText'), '超时要发取消');
@@ -373,7 +373,7 @@ test('任务单在投递之后被改写：后面审批看到的仍是投递那�
 test('review.fastMaxTokens / slowMaxTokens：两段调用的 maxOutputTokens 等于配置值且不同', async (t) => {
   const env = await setupReview(t, {
     script: {
-      generateText: { replies: ['N', '结论: allow | 规则: none | 理由: 日常工作'] },
+      generateText: { replies: ['N', 'Conclusion: allow | Rule: none | Reason: day-to-day work'] },
       turns: [{ permission: PERM_INSIDE() }],
     },
     reviewConfig: { review: { fastMaxTokens: 50, slowMaxTokens: 777 } },

@@ -50,9 +50,9 @@ test('未给 --yes 时退出并准确说明三级调用上限与 Write 本地 sk
   const result = run([]);
   assert.equal(result.status, 1, result.stderr);
   assert.equal(result.stdout, '');
-  assert.match(result.stderr, /这次会花额度/);
-  assert.match(result.stderr, /最多.*1.*Jev.*逻辑调用.*重试.*0-2.*ZCode/);
-  assert.match(result.stderr, /Write.*skip.*0.*Jev/);
+  assert.match(result.stderr, /this will spend quota/);
+  assert.match(result.stderr, /at most.*1.*Jev.*logical call.*retries.*0-2.*ZCode/);
+  assert.match(result.stderr, /local-skip Write.*0 Jev requests/);
   assert.match(result.stderr, /--yes/);
   assert.deepEqual(readRecord(mock.recordPath), []);
   assert.ok(!(await readdir(home)).includes('network-attempt'));
@@ -63,14 +63,14 @@ test('review.enabled:false 即使 --yes 也在 spawn 和付费前拒绝', async 
   const result = run(['--yes']);
   assert.equal(result.status, 1, result.stderr);
   assert.equal(result.stdout, '');
-  assert.match(result.stderr, /review.enabled.*false.*拒绝/);
+  assert.match(result.stderr, /review\.enabled:false; refusing to run model review/);
   assert.deepEqual(readRecord(mock.recordPath), []);
   assert.ok(!(await readdir(home)).includes('network-attempt'));
 });
 
 test('Write 配置 Jev 仅本地 skip，第一笔 ZCode 为快筛、第二笔为慢判', async (t) => {
   const { run, home } = await setup(t, {
-    review: { jev: { apiKey: 'synthetic-jev-key' } }, replies: ['N', '结论: allow'],
+    review: { jev: { apiKey: 'synthetic-jev-key' } }, replies: ['N', 'Conclusion: allow'],
   });
   const result = run(['--yes']);
   assert.equal(result.status, 0, result.stderr);
@@ -81,9 +81,9 @@ test('Write 配置 Jev 仅本地 skip，第一笔 ZCode 为快筛、第二笔为
   assert.equal(output.review.preScreen.outcome, 'skip');
   assert.equal(output.review.preScreen.attempts, 0);
   assert.equal(output.review.reviewer, 'zcode');
-  assert.match(result.stderr, /第 1 次 ZCode 调用（快筛/);
-  assert.match(result.stderr, /第 2 次 ZCode 调用（慢判/);
-  assert.match(result.stderr, /不是 Jev HTTP.*测量/);
+  assert.match(result.stderr, /ZCode call 1 \(fast screen/);
+  assert.match(result.stderr, /ZCode call 2 \(slow review/);
+  assert.match(result.stderr, /not a Jev HTTP performance measurement/);
   assert.ok(!(await readdir(home)).includes('network-attempt'));
 });
 
@@ -95,6 +95,6 @@ test('无 Jev 配置保留 ZCode 快筛且 preScreen 为空', async (t) => {
   assert.equal(output.decision, 'allow');
   assert.equal(output.calls, 1);
   assert.equal(output.review.preScreen, null);
-  assert.match(result.stderr, /第 1 次 ZCode 调用（快筛/);
+  assert.match(result.stderr, /ZCode call 1 \(fast screen/);
   assert.ok(!(await readdir(home)).includes('network-attempt'));
 });

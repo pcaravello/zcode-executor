@@ -93,16 +93,16 @@ export function installReloadWatcher(ctx, config, timing = {}) {
     const reload = () => {
         const fiber = ctx.fiber;
         if (fiber?.restart === undefined) {
-            ctx.logger?.warn?.('zcode-executor: 配置变更需要重载插件行，但当前上下文没有可用的 fiber.restart');
+            ctx.logger?.warn?.('zcode-executor: config change needs a plugin row reload, but the current context has no usable fiber.restart');
             return;
         }
         try {
             Promise.resolve(fiber.restart()).catch((error) => {
-                ctx.logger?.warn?.('zcode-executor: 插件行重载失败：%s', describe(error));
+                ctx.logger?.warn?.('zcode-executor: plugin row reload failed: %s', describe(error));
             });
         }
         catch (error) {
-            ctx.logger?.warn?.('zcode-executor: 插件行重载失败：%s', describe(error));
+            ctx.logger?.warn?.('zcode-executor: plugin row reload failed: %s', describe(error));
         }
     };
     ctx.effect(() => {
@@ -113,7 +113,7 @@ export function installReloadWatcher(ctx, config, timing = {}) {
             });
         }
         catch (error) {
-            ctx.logger?.warn?.('zcode-executor: 无法监听 loader/volatile-update：%s', describe(error));
+            ctx.logger?.warn?.('zcode-executor: cannot listen to loader/volatile-update: %s', describe(error));
         }
         return watcher.stop;
     }, 'zcode-executor: reload watcher');

@@ -76,11 +76,11 @@ const RECENT_MS = 30 * 60 * 1000; // 结束 30 分钟内的会话在「已结束
 const DONE_LIMIT = 5;
 
 const OUTCOMES: Record<string, Outcome> = {
-  done: { glyph: '✓', label: '已完成', color: 'success' },
-  timeout: { glyph: '◷', label: '已超时', color: 'warning' },
-  failed: { glyph: '✕', label: '执行失败', color: 'error' },
-  exited: { glyph: '✕', label: '执行失败', color: 'error' },
-  cancelled: { glyph: '–', label: '已取消', color: 'inactive' },
+  done: { glyph: '✓', label: 'done', color: 'success' },
+  timeout: { glyph: '◷', label: 'timed out', color: 'warning' },
+  failed: { glyph: '✕', label: 'failed', color: 'error' },
+  exited: { glyph: '✕', label: 'failed', color: 'error' },
+  cancelled: { glyph: '–', label: 'cancelled', color: 'inactive' },
 };
 
 const timeOf = (iso?: string | null): number => (iso ? Date.parse(iso) : NaN);
@@ -95,27 +95,27 @@ export function filterByRepo(sessions: SessionSnapshot[], repo: string | null | 
 export function outcomeOf(session: SessionSnapshot): Outcome {
   const known = OUTCOMES[session.lastOutcome ?? ''];
   if (known) return known;
-  if (session.phase === 'idle') return { glyph: '○', label: '空闲', color: 'inactive' };
-  if (session.lastOutcome === null || session.lastOutcome === undefined) return { glyph: '–', label: '已退出', color: 'inactive' };
+  if (session.phase === 'idle') return { glyph: '○', label: 'idle', color: 'inactive' };
+  if (session.lastOutcome === null || session.lastOutcome === undefined) return { glyph: '–', label: 'exited', color: 'inactive' };
   return { glyph: '?', label: String(session.lastOutcome), color: 'inactive' };
 }
 
 /** 卡片标题的状态文案与配色；kind 告诉布局用哪种图标（pulse 脉冲、wait 转圈、其余用 glyph）。 */
 export function headOf(session: SessionSnapshot): Head {
-  if (session.phase === 'stale') return { kind: 'glyph', glyph: '⚠', label: '执行进程已中断', color: 'error' };
+  if (session.phase === 'stale') return { kind: 'glyph', glyph: '⚠', label: 'Runner interrupted', color: 'error' };
   if (session.phase === 'pending') {
     const p = session.pendingDetail;
     const label = p?.kind === 'question'
-      ? `挂起：提问 ${p.questionTexts?.length ?? 0} 条`
-      : `挂起：审批请求（${p?.toolName ?? '未知工具'}）`;
+      ? `Pending: question (${p.questionTexts?.length ?? 0})`
+      : `Pending: permission request (${p?.toolName ?? 'unknown tool'})`;
     return { kind: 'glyph', glyph: '⏸', label, color: 'warning' };
   }
   const q = session.offpeakQueue;
   if (session.phase === 'running' && q?.phase === 'queued') {
-    return { kind: 'wait', label: q.position === null || q.position === undefined ? '闲时排队中' : `闲时排队中，第 ${q.position} 位`, color: 'suggestion' };
+    return { kind: 'wait', label: q.position === null || q.position === undefined ? 'Waiting in the off-peak queue' : `Waiting in the off-peak queue, position ${q.position}`, color: 'suggestion' };
   }
-  if (session.phase === 'running' && q?.phase === 'ready') return { kind: 'wait', label: '闲时已就绪，等待开始', color: 'suggestion' };
-  return { kind: 'pulse', label: '执行中', color: 'success' };
+  if (session.phase === 'running' && q?.phase === 'ready') return { kind: 'wait', label: 'Off-peak send ready, waiting to start', color: 'suggestion' };
+  return { kind: 'pulse', label: 'Running', color: 'success' };
 }
 
 /** 「N 分钟」「N 小时 M 分」；since 为空或解析不了给 null（卡片右上角就不显示）。 */
@@ -123,9 +123,9 @@ export function elapsed(since: string | null | undefined, now: number): string |
   const t = timeOf(since);
   if (Number.isNaN(t)) return null;
   const m = Math.max(0, Math.floor((now - t) / 60000));
-  if (m < 1) return '不到 1 分钟';
-  if (m < 60) return `${m} 分钟`;
-  return `${Math.floor(m / 60)} 小时 ${m % 60} 分`;
+  if (m < 1) return 'under 1 min';
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
 /** 卡片右上角：执行中「已运行」、挂起「已等待」、排队「已排」、中断只写时长。 */
@@ -133,9 +133,9 @@ export function cornerOf(session: SessionSnapshot, now: number): string | null {
   const span = elapsed(session.since, now);
   if (span === null) return null;
   if (session.phase === 'stale') return span;
-  if (session.phase === 'pending') return `已等待 ${span}`;
-  if (headOf(session).kind === 'wait') return `已排 ${span}`;
-  return `已运行 ${span}`;
+  if (session.phase === 'pending') return `Waiting ${span}`;
+  if (headOf(session).kind === 'wait') return `Queued ${span}`;
+  return `Running ${span}`;
 }
 
 /**

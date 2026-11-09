@@ -68,11 +68,11 @@ function SummaryRow(props: {
     : '--:--:--';
   return (
     <div className="zxe-summary">
-      {chip('todo', 'zxe-c-todo', '待处理', counts.todo)}
-      {chip('doing', 'zxe-c-doing', '执行中', counts.doing)}
-      {chip('done', 'zxe-c-done', '已结束', counts.done)}
-      <span className="zxe-live" data-link={link} title="「数据」是最后一次数据到达的时刻：和右侧走秒的本地钟差距变大，说明数据流停格">
-        <span className="zxe-dclock">数据 {dataClock}</span>
+      {chip('todo', 'zxe-c-todo', 'Pending', counts.todo)}
+      {chip('doing', 'zxe-c-doing', 'Running', counts.doing)}
+      {chip('done', 'zxe-c-done', 'Ended', counts.done)}
+      <span className="zxe-live" data-link={link} title={'"Data" is when data last arrived: a widening gap against the ticking local clock on the right means the data stream has stalled'}>
+        <span className="zxe-dclock">Data {dataClock}</span>
         <PulseIcon size={12} />
         <LiveClock />
       </span>
@@ -88,15 +88,15 @@ function ScopeBar(props: {
 }): ReactElement {
   const { scope, scopeRepo, onChange } = props;
   const note =
-    scope === 'all' ? '显示全部项目' : scopeRepo !== null ? repoNameOf(scopeRepo) : '未识别当前项目，显示全部';
+    scope === 'all' ? 'Showing all projects' : scopeRepo !== null ? repoNameOf(scopeRepo) : 'Current project not identified; showing all';
   return (
     <div className="zxe-scopebar">
-      <span className="zxe-seg" role="group" aria-label="显示范围">
+      <span className="zxe-seg" role="group" aria-label="Scope">
         <button type="button" aria-pressed={scope === 'proj'} onClick={() => onChange('proj')}>
-          本项目
+          This project
         </button>
         <button type="button" aria-pressed={scope === 'all'} onClick={() => onChange('all')}>
-          全部项目
+          All projects
         </button>
       </span>
       <span className="zxe-scope-note">{note}</span>
@@ -125,8 +125,8 @@ function Section(props: {
 
 /** 断连 / 启动失败横幅的文案：down 用服务端带来的原因，failed 指向 execPath 配置。 */
 function bannerOf(state: SnapshotStoreState): string | null {
-  if (state.link === 'down') return state.message ?? '实时连接中断，正在重连。重连完成前的变化不补提示。';
-  if (state.link === 'failed') return state.message ?? 'watch 进程启动失败：请检查插件设置里的 execPath（zcode-executor 可执行文件路径）。';
+  if (state.link === 'down') return state.message ?? 'Live connection lost, reconnecting. Changes made before reconnection completes are not replayed.';
+  if (state.link === 'failed') return state.message ?? 'Failed to start the watch process: check execPath (the zcode-executor executable path) in the plugin settings.';
   return null;
 }
 
@@ -194,17 +194,17 @@ export function Body(props: { store: SnapshotStore }): ReactElement {
         <ScopeBar scope={scope} scopeRepo={state.scopeRepo} onChange={setScope} />
         {banner !== null ? <div className="zxe-banner">{banner}</div> : null}
         {isEmptyPane ? (
-          <div className="zxe-empty">没有 zcode 会话。</div>
+          <div className="zxe-empty">No zcode sessions.</div>
         ) : (
           <>
             <Section
-              title="待处理"
+              title="Pending"
               count={String(sections.counts.todo)}
               innerRef={(el) => {
                 sectionRefs.todo.current = el;
               }}
               isEmpty={sections.todo.length === 0}
-              empty="没有挂起的回合。"
+              empty="No pending turns."
             >
               {/* 与已结束段同款容器：卡片族的横向留白与间距都在 .zxe-cards 上（2026-10-07 修复：
                   此前两段裸渲染导致贴边，已结束段改的 padding 对它们不生效） */}
@@ -215,13 +215,13 @@ export function Body(props: { store: SnapshotStore }): ReactElement {
               </div>
             </Section>
             <Section
-              title="执行中"
+              title="Running"
               count={String(sections.counts.doing)}
               innerRef={(el) => {
                 sectionRefs.doing.current = el;
               }}
               isEmpty={sections.doing.length === 0}
-              empty="没有执行中的回合。"
+              empty="No running turns."
             >
               <div className="zxe-cards">
                 {sections.doing.map((s) => (
@@ -230,13 +230,13 @@ export function Body(props: { store: SnapshotStore }): ReactElement {
               </div>
             </Section>
             <Section
-              title="已结束"
-              count={shownDone > 0 ? `最近 ${shownDone} 条` : '0'}
+              title="Ended"
+              count={shownDone > 0 ? `last ${shownDone}` : '0'}
               innerRef={(el) => {
                 sectionRefs.done.current = el;
               }}
               isEmpty={shownDone === 0}
-              empty="还没有结束的回合。"
+              empty="No ended turns yet."
             >
               <>
                 {sections.recent.length > 0 ? (

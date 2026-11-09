@@ -377,13 +377,13 @@ test('watch 不带 --json：人读文字变化才出新行，不含 JSON', async
   await makeSession(home, 'x_00000001', {}); // 没有任何状态文件：首轮是「空闲」
   const w = startWatch(home, { json: false });
   const first = await w.waitForLine((o, line) => line.startsWith('x_00000001'));
-  assert.ok(first.line.includes('空闲'), `首轮该是空闲：${first.line}`);
+  assert.ok(first.line.includes('idle'), `首轮该是空闲：${first.line}`);
   // 阶段从 idle 变 exited：人读文字确实变了，必须出新行
   await makeSession(home, 'x_00000001', {
     state: { ...EXITED_STATE, sessionId: 'x_00000001' },
     last: EXITED_LAST(T(1)),
   });
-  const next = await w.waitForLine((o, line) => line.startsWith('x_00000001') && line.includes('已结束'));
+  const next = await w.waitForLine((o, line) => line.startsWith('x_00000001') && line.includes('ended'));
   assert.notEqual(next.line, first.line);
   assert.ok(w.lines.every((l) => !l.trimStart().startsWith('{')), '人读模式不该有 JSON 行');
   assert.ok(w.lines.every((l) => !l.includes('"type"')));
