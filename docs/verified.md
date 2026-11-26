@@ -279,6 +279,34 @@ PR #7（issue #6）的核对与实测，host 进程 `out/host/index.js` 反编�
   弹了选「始终允许」即可；被拒过到钥匙串访问里改回允许。
 - Windows/Linux 的 os 源走 @napi-rs/keyring（DPAPI / Secret Service），插件暂无等价实现，报「不支持」（见 D19 补充）。
 
+## Windows 凭据管理器与 ZCode 4.0.0 凭据布局（fork，2026-11-25，App 4.0.0 / runtime 0.18.0，Windows 10，零 token）
+
+fork（pcaravello/zcode-executor）的真机记录，对应 decisions F-2。只看形状与有无，没有打印任何密钥或解出来的值。
+
+- os 源密钥在 Windows 上的存法（对照 crates.io 的 keyring-core 1.0.1、windows-native-keyring-store 1.1.0 源码，并在本机凭据管理器核对）：
+  `@napi-rs/keyring` 2.1.2 把它写成通用凭据，target = `<sha256(resolve 后的凭据文件路径) hex>.ZCode Credential Encryption`，
+  blob 是密钥 base64url 串（43 字符）的 UTF-16LE、不带结尾零；底层是 advapi32 的 `CredReadW` / `CredWriteW`。
+  本机条目名里的 64 位 hex 与 `sha256(path.resolve(凭据路径))` 一致。
+- 读法与耗时：系统自带的 powershell.exe P/Invoke `CredReadW`。在 PowerShell 里用 `Marshal.PtrToStructure` 转结构体失败
+  （「结构必须是 blittable 或带 layout 信息」），改成在 C# 里转好、只把 byte[] 交回 PowerShell 才通。含 Add-Type 编译一次约 0.45 秒；
+  按进程缓存后同进程再读 1 毫秒以内。
+- 端到端：本机 credentials.json 的 8 个值全是 `enc:v2:os:`、同一个指纹，`credential-source` 为 `os`。读出的密钥指纹与文件一致；
+  `readCodingPlanKeys` 解出 family=zai，`readStartPlanAuth` 解出 JWT；`plans` 为空（原因见下一条）。
+- 4.0.0 的凭据布局变了：文件里没有 `account-provider:coding-plan:account:<family>-<plan>-coding-plan:account:<id>:api-key`，
+  取而代之的是 `account-provider:account:<family>-<plan>-coding-plan:identity`、`…:auth-source`、
+  `project-key-location:v1:<编码的 [origin, family, accountId, team, 用途, 项目选择]>`，另有 `oauth:<family>:access_token`。
+  对照 ZCode 4.0.0 源码 `packages/shared/src/project-access-token-client.ts`：coding plan 的模型请求不用静态 key，
+  而是用登录 JWT 按项目现场签发短期的 project access token，key 的位置记在 project-key-location。
+  `user_info` 是 rawProfile，账号 id 在 `user_id`（上游 0.6.2 的兜底覆盖这一种；键名反推补丁在这里没有键可推，仍保留给旧布局）。
+- 后果（本机实测，设了 `ZCODE_BIN`）：`doctor --json` 的账号型来源解密成功但 `plans` 为空、provider 数为 0，legacy `config.json` 不存在，
+  于是报 provider registry 为空、握手跳过；`new` 退出码 1，同一条原因。也就是 ZCode 4.0.0 登录的账号建不出会话，
+  start plan 投递无从谈起；上游 0.6.5 同样如此。旧版本登录留下的静态 key、或 `config.json` 里带 apiKey 的 provider 不受影响（未在本机验证）。
+- App 位置：`findZcode` 的默认候选只有 macOS 与 Linux，Windows 上要设 `ZCODE_BIN`
+  （本机 `%LOCALAPPDATA%\Programs\ZCode\resources\glm\zcode.cjs`，`--version` 打 0.18.0）。
+  内置 provider 文件经 0.6.5 的 runtime 副本回落命中
+  `~/.zcode/v2/runtime/provider/windows-x86_64/4.0.0/endpoint-<hash>/zcode-builtin.json`，里面有
+  `account:zai-individual-coding-plan`、`account:zai-team-coding-plan`、`account:zai-start-plan` 等条目。
+
 ## 凭据文件探针（2026-09-21，App 3.12.2，scripts/probe-credentials.mjs，零 token）
 
 T6-C 的背景事实，用户本机跑探针核实；加密与键名细节从 ZCode 开源源码 3.14.0 读出、本机文件格式核对：
