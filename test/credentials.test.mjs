@@ -262,6 +262,125 @@ test('credentials：纯 v2:os 凭据不受旁边不合规 credential-secret 影�
   assert.equal(res.family, 'zai');
 });
 
+// ---------- Windows 的 os 源（fork，decisions F-2；系统凭据的读法用 osKeyReader 注入，不碰真机） ----------
+
+/** 写一份全是 enc:v2:os 的夹具（同一把密钥），返回凭据文件路径。 */
+async function writeV2OsCredentials(osKey, entries) {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'zcode-cred-test-'));
+  dirs.push(dir);
+  const file = path.join(dir, 'credentials.json');
+  const out = {};
+  for (const [k, v] of Object.entries(entries)) out[k] = encryptV2(v, { source: 'os', key: osKey });
+  await writeFile(file, JSON.stringify(out));
+  return file;
+}
+
+test('credentials：Windows 上 os 源密钥按 `<account>.<service>` 读凭据管理器（fork，F-2）', async () => {
+  const osKey = randomBytes(32);
+  const file = await writeV2OsCredentials(osKey, fullEntries({ family: 'zai' }));
+  const targets = [];
+  const out = readCodingPlanKeys({
+    credentialsPath: file,
+    env: {},
+    platform: 'win32',
+    osKeyReader: (target) => {
+      targets.push(target);
+      return osKey.toString('base64url');
+    },
+  });
+  const account = createHash('sha256').update(path.resolve(file), 'utf8').digest('hex');
+  assert.deepEqual(targets, [`${account}.ZCode Credential Encryption`]); // App 的 @napi-rs/keyring 写的 target 名
+  assert.equal(out.family, 'zai');
+  assert.equal(out.accountId, ACCOUNT_ID);
+  assert.ok(out.plans.individual);
+});
+
+test('credentials：Windows 的 os 源密钥按进程缓存，同一份凭据只读一次系统存储（fork，F-2）', async () => {
+  const osKey = randomBytes(32);
+  const file = await writeV2OsCredentials(osKey, offPeakEntries({ family: 'zai' }));
+  let reads = 0;
+  const opts = {
+    credentialsPath: file,
+    env: {},
+    platform: 'win32',
+    osKeyReader: () => {
+      reads += 1;
+      return osKey.toString('base64url');
+    },
+  };
+  const first = readCodingPlanKeys(opts);
+  const second = readOffPeakAuth(opts); // 同进程第二次打开：不再碰系统存储
+  assert.equal(first.family, 'zai');
+  assert.equal(second.jwt, TEST_JWT);
+  assert.equal(reads, 1); // 读一次要起一个 powershell
+});
+
+test('credentials：Windows 缓存的密钥指纹对不上 → 丢缓存重读一次，读到新密钥就照常解（fork，F-2）', async () => {
+  const oldKey = randomBytes(32);
+  const newKey = randomBytes(32);
+  const file = await writeV2OsCredentials(newKey, fullEntries({ family: 'zai' }));
+  let reads = 0;
+  const out = readCodingPlanKeys({
+    credentialsPath: file,
+    env: {},
+    platform: 'win32',
+    osKeyReader: () => {
+      reads += 1;
+      return (reads === 1 ? oldKey : newKey).toString('base64url'); // 第一次拿到的是 App 重登前的旧密钥
+    },
+  });
+  assert.equal(reads, 2);
+  assert.equal(out.family, 'zai');
+  assert.ok(out.plans.individual);
+});
+
+test('credentials：Windows 重读后指纹仍对不上 → unavailable，且只重读一次（fork，F-2）', async () => {
+  const file = await writeV2OsCredentials(randomBytes(32), fullEntries({ family: 'zai' }));
+  const wrong = randomBytes(32).toString('base64url');
+  let reads = 0;
+  const out = readCodingPlanKeys({
+    credentialsPath: file,
+    env: {},
+    platform: 'win32',
+    osKeyReader: () => {
+      reads += 1;
+      return wrong;
+    },
+  });
+  assert.equal(out?.kind, 'unavailable');
+  assert.match(out.error, /fingerprint mismatch/);
+  assert.equal(reads, 2);
+});
+
+test('credentials：Windows 凭据管理器里没有这个凭据文件的密钥条目 → unavailable，提示重登 App（fork，F-2）', async () => {
+  const file = await writeV2OsCredentials(randomBytes(32), fullEntries({ family: 'zai' }));
+  const out = readCodingPlanKeys({ credentialsPath: file, env: {}, platform: 'win32', osKeyReader: () => null });
+  assert.equal(out?.kind, 'unavailable');
+  assert.match(out.error, /no key entry for this credentials file in Windows Credential Manager/);
+});
+
+test('credentials：Windows 上系统凭据读不了 → unavailable，error 不带原始报错正文（fork，F-2）', async () => {
+  const file = await writeV2OsCredentials(randomBytes(32), fullEntries({ family: 'zai' }));
+  const out = readCodingPlanKeys({
+    credentialsPath: file,
+    env: {},
+    platform: 'win32',
+    osKeyReader: () => {
+      throw new Error('boom with internal detail');
+    },
+  });
+  assert.equal(out?.kind, 'unavailable');
+  assert.match(out.error, /cannot read the credential key from Windows Credential Manager/);
+  assert.equal(out.error.includes('boom with internal detail'), false);
+});
+
+test('credentials：Linux 的 os 源仍报不支持——fork 只补了 Windows（F-2）', async () => {
+  const file = await writeV2OsCredentials(randomBytes(32), fullEntries({ family: 'zai' }));
+  const out = readCodingPlanKeys({ credentialsPath: file, env: {}, platform: 'linux' });
+  assert.equal(out?.kind, 'unavailable');
+  assert.match(out.error, /Linux has no equivalent implementation yet/);
+});
+
 // ---------- deriveCredentialKey / defaultCredentialsPath ----------
 
 test('credentials：ZCODE_CREDENTIAL_SECRET 优先于平台派生（env 原样取 sha256，32 字节）', () => {
