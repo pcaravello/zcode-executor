@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCipheriv, createHash, randomBytes } from 'node:crypto';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { chmodSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -36,6 +37,16 @@ function encrypt(plain, key = KEY) {
 const ACCOUNT_ID = '10086';
 const individualKey = () => `account-key-individual-${randomBytes(4).toString('hex')}`;
 const teamKey = () => `account-key-team-${randomBytes(4).toString('hex')}`;
+
+/** enc:v2 夹具的加密端：照 App 3.18 的形状 enc:v2:<源>:<sha256(key)前24位hex>:<iv>.<tag>.<密文>。 */
+function encryptV2(plain, { source, key }) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const data = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+  const b64u = (buf) => buf.toString('base64url');
+  const fp = createHash('sha256').update(key).digest('hex').slice(0, 24);
+  return `enc:v2:${source}:${fp}:${b64u(iv)}.${b64u(cipher.getAuthTag())}.${b64u(data)}`;
+}
 
 /** 写一份 credentials.json 夹具；entries 的值是明文，needEnc 的键会被加密。 */
 async function writeCredentials(entries, { encryptKeys = Object.keys(entries) } = {}) {
@@ -106,21 +117,286 @@ test('credentials：格式不对（段数、iv/tag 长度）→ 抛 Error，mess
   }
 });
 
+test('credentials：env 未 trim 的密钥也能解 enc:v1（App 3.18 的候选表第一把是 env 原样）', () => {
+  // App 3.18 起对 enc:v1 按 [env 原样、env trim、平台派生] 依序试；之前只认 trim 后一把
+  const untrimmedKey = createHash('sha256').update('  secret-with-spaces  ', 'utf8').digest();
+  const sealed = encrypt('plain-for-untrimmed', untrimmedKey);
+  assert.equal(decryptCredentialValue(sealed, deriveCredentialKey({ env: { ZCODE_CREDENTIAL_SECRET: '  secret-with-spaces  ' } })), 'plain-for-untrimmed');
+});
+
+test('credentials：其它 enc:<版本> 前缀不当明文 → 抛「不认得」（issue #6 误报的根因）', () => {
+  for (const v of ['enc:v3:whatever', 'enc:garbage', 'enc:v2malformed']) {
+    assert.throws(() => decryptCredentialValue(v, KEY), /not recognized/);
+  }
+  // v2 结构对但调用方没给凭据上下文：也明确报错，不再静默当明文
+  assert.throws(() => decryptCredentialValue('enc:v2:os:0123456789abcdef01234567:AAAA.BBBB.CCCC', KEY), /credentials file context/);
+});
+
+// ---------- enc:v2（App 3.18 起；issue #6） ----------
+
+test('credentials：enc:v2:os roundtrip —— os 源密钥是指纹匹配的 32 字节随机数', () => {
+  const osKey = randomBytes(32);
+  const plain = 'sk-os-source-value-12345';
+  const sealed = encryptV2(plain, { source: 'os', key: osKey });
+  const ctx = { credentialsFile: '/nonexistent/credentials.json', osSecret: osKey.toString('base64url'), env: {} };
+  assert.equal(decryptCredentialValue(sealed, ctx), plain);
+});
+
+test('credentials：enc:v2:env roundtrip —— env 源密钥 = sha256(managed secret)', () => {
+  const secret = 'managed-secret-for-env-source-12345678';
+  const plain = 'sk-env-source-value';
+  const sealed = encryptV2(plain, { source: 'env', key: createHash('sha256').update(secret, 'utf8').digest() });
+  const ctx = { credentialsFile: '/nonexistent/credentials.json', env: { ZCODE_CREDENTIAL_SECRET: secret } };
+  assert.equal(decryptCredentialValue(sealed, ctx), plain);
+});
+
+test('credentials：enc:v2 密钥指纹对不上 → 存储不可用（照 App 归 unavailable，不换源）', () => {
+  const sealed = encryptV2('x', { source: 'os', key: randomBytes(32) });
+  const ctx = { credentialsFile: '/nonexistent/credentials.json', osSecret: randomBytes(32).toString('base64url'), env: {} };
+  assert.throws(
+    () => decryptCredentialValue(sealed, ctx),
+    (e) => /fingerprint/.test(e.message) && e.code === 'CREDENTIAL_SECURE_STORAGE_UNAVAILABLE',
+  );
+});
+
+test('credentials：enc:v2 结构不对 / 源不认得 → 格式错误', () => {
+  const ctx = { credentialsFile: '/nonexistent/credentials.json', osSecret: randomBytes(32).toString('base64url'), env: {} };
+  for (const v of [
+    'enc:v2:os:nothex0123456789abcdef:AAAA.BBBB.CCCC', // 指纹非 hex
+    'enc:v2:bogus:0123456789abcdef01234567:AAAA.BBBB.CCCC', // 源不认得
+    'enc:v2:os:0123456789abcdef01234567', // 缺段
+    'enc:v2::0123456789abcdef01234567:AAAA.BBBB.CCCC', // 空源
+  ]) {
+    assert.throws(() => decryptCredentialValue(v, ctx), /wrong format/);
+  }
+});
+
+test('credentials：enc:v2:os 的密钥形状不对 → 存储不可用（unavailable）', () => {
+  const sealed = encryptV2('x', { source: 'os', key: randomBytes(32) });
+  const ctx = { credentialsFile: '/nonexistent/credentials.json', osSecret: 'too-short', env: {} };
+  assert.throws(() => decryptCredentialValue(sealed, ctx), /wrong shape/);
+});
+
+test('credentials：enc:v2:env 的 managed secret 找不到 → 存储不可用（unavailable）', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'zcode-cred-test-'));
+  dirs.push(dir);
+  const file = path.join(dir, 'credentials.json');
+  const sealed = encryptV2('zai', { source: 'env', key: randomBytes(32) });
+  await writeFile(file, JSON.stringify({ 'oauth:active_provider': sealed }));
+  const out = readCodingPlanKeys({ credentialsPath: file, env: {} });
+  assert.equal(out?.kind, 'unavailable');
+  assert.match(out.error, /managed secret/);
+});
+
+test('credentials：credential-source 钉了非 os 的值 → 整份凭据按不可用处理（照 App 口径）', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'zcode-cred-test-'));
+  dirs.push(dir);
+  const file = path.join(dir, 'credentials.json');
+  await writeFile(file, JSON.stringify({ 'oauth:active_provider': 'zai' }));
+  await writeFile(path.join(dir, 'credential-source'), 'env\n');
+  const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
+  assert.equal(out?.kind, 'unavailable');
+  assert.match(out.error, /credential-source/);
+});
+
+test('credentials：enc:v2:os 整链路 —— credentials.json + 注入钥匙串密钥能读出 family', async () => {
+  const osKey = randomBytes(32);
+  const entries = fullEntries({ family: 'zai' });
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'zcode-cred-test-'));
+  dirs.push(dir);
+  const file = path.join(dir, 'credentials.json');
+  const out = {};
+  for (const [k, v] of Object.entries(entries)) out[k] = encryptV2(v, { source: 'os', key: osKey });
+  await writeFile(file, JSON.stringify(out));
+  const res = readCodingPlanKeys({ credentialsPath: file, env: {}, osSecret: osKey.toString('base64url') });
+  assert.equal(res.family, 'zai');
+  assert.equal(res.accountId, ACCOUNT_ID);
+  assert.ok(res.plans.individual);
+});
+
+test('credentials：enc:v1 候选表第一把是凭据旁的 credential-secret（App legacySecret）', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'zcode-cred-test-'));
+  dirs.push(dir);
+  // App 在钥匙串不可用时会把受管密钥落到凭据旁的 credential-secret（600、32–4096 字节），
+  // 此时它也是 enc:v1 的第一把候选密钥
+  const secret = 'sidecar-managed-secret-0123456789';
+  await writeFile(path.join(dir, 'credential-secret'), secret, { mode: 0o600 });
+  const key = createHash('sha256').update(secret, 'utf8').digest();
+  const file = path.join(dir, 'credentials.json');
+  const out = {};
+  for (const [k, v] of Object.entries(fullEntries({ family: 'zai' }))) out[k] = encrypt(v, key);
+  await writeFile(file, JSON.stringify(out));
+  const res = readCodingPlanKeys({ credentialsPath: file, env: {} });
+  assert.equal(res.family, 'zai');
+  assert.ok(res.plans.individual);
+});
+
+test('credentials：ZCODE_CREDENTIAL_SECRET_FILE 指的文件不查权限位（照 App），mode 640 也能当 v1 候选', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'zcode-cred-test-'));
+  dirs.push(dir);
+  const secret = 'file-env-managed-secret-0123456789';
+  const secretFile = path.join(dir, 'my-secret');
+  await writeFile(secretFile, secret, { mode: 0o640 });
+  chmodSync(secretFile, 0o640); // 防 umask，确保真的是 640
+  const key = createHash('sha256').update(secret, 'utf8').digest();
+  const file = path.join(dir, 'credentials.json');
+  const out = {};
+  for (const [k, v] of Object.entries(fullEntries())) out[k] = encrypt(v, key);
+  await writeFile(file, JSON.stringify(out));
+  const res = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET_FILE: secretFile } });
+  assert.equal(res.family, 'bigmodel');
+  assert.ok(res.plans.team);
+});
+
+test('credentials：纯 v2:os 凭据不受旁边不合规 credential-secret 影响（v1 候选懒算）', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'zcode-cred-test-'));
+  dirs.push(dir);
+  // 长度不够且权限位不对的旁路文件：只有真解到 enc:v1 才会去解析它，纯 v2:os 不该被拖垮
+  await writeFile(path.join(dir, 'credential-secret'), 'short', { mode: 0o644 });
+  const osKey = randomBytes(32);
+  const file = path.join(dir, 'credentials.json');
+  const out = {};
+  for (const [k, v] of Object.entries(fullEntries({ family: 'zai' }))) out[k] = encryptV2(v, { source: 'os', key: osKey });
+  await writeFile(file, JSON.stringify(out));
+  const res = readCodingPlanKeys({ credentialsPath: file, env: {}, osSecret: osKey.toString('base64url') });
+  assert.equal(res.family, 'zai');
+});
+
+// ---------- Windows 的 os 源（fork，decisions F-2；系统凭据的读法用 osKeyReader 注入，不碰真机） ----------
+
+/** 写一份全是 enc:v2:os 的夹具（同一把密钥），返回凭据文件路径。 */
+async function writeV2OsCredentials(osKey, entries) {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'zcode-cred-test-'));
+  dirs.push(dir);
+  const file = path.join(dir, 'credentials.json');
+  const out = {};
+  for (const [k, v] of Object.entries(entries)) out[k] = encryptV2(v, { source: 'os', key: osKey });
+  await writeFile(file, JSON.stringify(out));
+  return file;
+}
+
+test('credentials：Windows 上 os 源密钥按 `<account>.<service>` 读凭据管理器（fork，F-2）', async () => {
+  const osKey = randomBytes(32);
+  const file = await writeV2OsCredentials(osKey, fullEntries({ family: 'zai' }));
+  const targets = [];
+  const out = readCodingPlanKeys({
+    credentialsPath: file,
+    env: {},
+    platform: 'win32',
+    osKeyReader: (target) => {
+      targets.push(target);
+      return osKey.toString('base64url');
+    },
+  });
+  const account = createHash('sha256').update(path.resolve(file), 'utf8').digest('hex');
+  assert.deepEqual(targets, [`${account}.ZCode Credential Encryption`]); // App 的 @napi-rs/keyring 写的 target 名
+  assert.equal(out.family, 'zai');
+  assert.equal(out.accountId, ACCOUNT_ID);
+  assert.ok(out.plans.individual);
+});
+
+test('credentials：Windows 的 os 源密钥按进程缓存，同一份凭据只读一次系统存储（fork，F-2）', async () => {
+  const osKey = randomBytes(32);
+  const file = await writeV2OsCredentials(osKey, offPeakEntries({ family: 'zai' }));
+  let reads = 0;
+  const opts = {
+    credentialsPath: file,
+    env: {},
+    platform: 'win32',
+    osKeyReader: () => {
+      reads += 1;
+      return osKey.toString('base64url');
+    },
+  };
+  const first = readCodingPlanKeys(opts);
+  const second = readOffPeakAuth(opts); // 同进程第二次打开：不再碰系统存储
+  assert.equal(first.family, 'zai');
+  assert.equal(second.jwt, TEST_JWT);
+  assert.equal(reads, 1); // 读一次要起一个 powershell
+});
+
+test('credentials：Windows 缓存的密钥指纹对不上 → 丢缓存重读一次，读到新密钥就照常解（fork，F-2）', async () => {
+  const oldKey = randomBytes(32);
+  const newKey = randomBytes(32);
+  const file = await writeV2OsCredentials(newKey, fullEntries({ family: 'zai' }));
+  let reads = 0;
+  const out = readCodingPlanKeys({
+    credentialsPath: file,
+    env: {},
+    platform: 'win32',
+    osKeyReader: () => {
+      reads += 1;
+      return (reads === 1 ? oldKey : newKey).toString('base64url'); // 第一次拿到的是 App 重登前的旧密钥
+    },
+  });
+  assert.equal(reads, 2);
+  assert.equal(out.family, 'zai');
+  assert.ok(out.plans.individual);
+});
+
+test('credentials：Windows 重读后指纹仍对不上 → unavailable，且只重读一次（fork，F-2）', async () => {
+  const file = await writeV2OsCredentials(randomBytes(32), fullEntries({ family: 'zai' }));
+  const wrong = randomBytes(32).toString('base64url');
+  let reads = 0;
+  const out = readCodingPlanKeys({
+    credentialsPath: file,
+    env: {},
+    platform: 'win32',
+    osKeyReader: () => {
+      reads += 1;
+      return wrong;
+    },
+  });
+  assert.equal(out?.kind, 'unavailable');
+  assert.match(out.error, /fingerprint mismatch/);
+  assert.equal(reads, 2);
+});
+
+test('credentials：Windows 凭据管理器里没有这个凭据文件的密钥条目 → unavailable，提示重登 App（fork，F-2）', async () => {
+  const file = await writeV2OsCredentials(randomBytes(32), fullEntries({ family: 'zai' }));
+  const out = readCodingPlanKeys({ credentialsPath: file, env: {}, platform: 'win32', osKeyReader: () => null });
+  assert.equal(out?.kind, 'unavailable');
+  assert.match(out.error, /no key entry for this credentials file in Windows Credential Manager/);
+});
+
+test('credentials：Windows 上系统凭据读不了 → unavailable，error 不带原始报错正文（fork，F-2）', async () => {
+  const file = await writeV2OsCredentials(randomBytes(32), fullEntries({ family: 'zai' }));
+  const out = readCodingPlanKeys({
+    credentialsPath: file,
+    env: {},
+    platform: 'win32',
+    osKeyReader: () => {
+      throw new Error('boom with internal detail');
+    },
+  });
+  assert.equal(out?.kind, 'unavailable');
+  assert.match(out.error, /cannot read the credential key from Windows Credential Manager/);
+  assert.equal(out.error.includes('boom with internal detail'), false);
+});
+
+test('credentials：Linux 的 os 源仍报不支持——fork 只补了 Windows（F-2）', async () => {
+  const file = await writeV2OsCredentials(randomBytes(32), fullEntries({ family: 'zai' }));
+  const out = readCodingPlanKeys({ credentialsPath: file, env: {}, platform: 'linux' });
+  assert.equal(out?.kind, 'unavailable');
+  assert.match(out.error, /Linux has no equivalent implementation yet/);
+});
+
 // ---------- deriveCredentialKey / defaultCredentialsPath ----------
 
-test('credentials：ZCODE_CREDENTIAL_SECRET 优先于平台派生（trim 后取 sha256，32 字节）', () => {
+test('credentials：ZCODE_CREDENTIAL_SECRET 优先于平台派生（env 原样取 sha256，32 字节）', () => {
+  // App 3.18 起候选表第一把是 env 原样（不 trim）：deriveCredentialKey 返回的就是它
   const key = deriveCredentialKey({ env: { ZCODE_CREDENTIAL_SECRET: `  ${SECRET}  ` } });
   assert.ok(Buffer.isBuffer(key));
   assert.equal(key.length, 32);
-  assert.deepEqual(key, createHash('sha256').update(SECRET, 'utf8').digest());
-  // 空白串视为没设，回落到平台派生
-  const fallback = deriveCredentialKey({
+  assert.deepEqual(key, createHash('sha256').update(`  ${SECRET}  `, 'utf8').digest());
+  // 空白串在 App 口径里也是真值：第一把候选是 sha256('   ')，平台派生仍进候选表兜底
+  const blank = deriveCredentialKey({
     env: { ZCODE_CREDENTIAL_SECRET: '   ' },
     platform: 'darwin',
     homedir: '/Users/t',
     username: 't',
   });
-  assert.deepEqual(fallback, createHash('sha256').update('zcode-credential-fallback:darwin:/Users/t:t', 'utf8').digest());
+  assert.deepEqual(blank, createHash('sha256').update('   ', 'utf8').digest());
 });
 
 test('credentials：无环境变量时按 zcode-credential-fallback:<platform>:<homedir>:<username> 派生', () => {
@@ -137,6 +413,16 @@ test('credentials：defaultCredentialsPath 落在 ZCODE_DATA_BASE_DIR 或 home �
   const noBase = defaultCredentialsPath({ ZCODE_DATA_BASE_DIR: '' });
   assert.ok(noBase.startsWith(os.homedir()));
   assert.equal(path.relative(os.homedir(), noBase), path.join('.zcode', 'v2', 'credentials.json'));
+  // 注入 env 只给 HOME=B（不设 ZCODE_DATA_BASE_DIR）：凭据路径按 B 解，与 runtime 模型缓存同一数据根（review r3）
+  assert.equal(
+    defaultCredentialsPath({ HOME: '/tmp/fixture-homeB' }),
+    path.join('/tmp/fixture-homeB', '.zcode', 'v2', 'credentials.json'),
+  );
+  // ZCODE_DATA_BASE_DIR 仍赢过 HOME
+  assert.equal(
+    defaultCredentialsPath({ ZCODE_DATA_BASE_DIR: '/tmp/fixture-data', HOME: '/tmp/fixture-homeB' }),
+    path.join('/tmp/fixture-data', '.zcode', 'v2', 'credentials.json'),
+  );
 });
 
 // ---------- readCodingPlanKeys ----------
@@ -199,7 +485,7 @@ test('credentials：user_info 缺 id 且键名推不出来（连 plan key 都没
   const file = await writeCredentials(entries);
   const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
   assert.ok(out?.error);
-  assert.match(out.error, /id/);
+  assert.match(out.error, /account id/);
 });
 
 test('credentials：user_info 缺 id、某把 plan 的候选键名不唯一 → 该把被跳过，不瞎选', async () => {
@@ -213,6 +499,65 @@ test('credentials：user_info 缺 id、某把 plan 的候选键名不唯一 → 
   assert.equal(out.accountId, ACCOUNT_ID); // id 来自 team 那把键名
   assert.equal(out.plans.individual, undefined);
   assert.equal(out.plans.team, entries['account-provider:coding-plan:account:bigmodel-team-coding-plan:account:10086:api-key']);
+});
+
+test('credentials：user_info 缺 id、键名里的 id 转义是坏的 → 该键不算候选，不当异常冒出来', async () => {
+  const entries = {
+    'oauth:active_provider': 'bigmodel',
+    'oauth:bigmodel:user_info': JSON.stringify({ username: 'no-id-here' }),
+    // %ZZ 不是合法的百分号转义：decodeURIComponent 会抛 URIError
+    'account-provider:coding-plan:account:bigmodel-individual-coding-plan:account:%ZZ:api-key': individualKey(),
+  };
+  const file = await writeCredentials(entries);
+  const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
+  assert.equal(out?.kind, 'not-applicable');
+  assert.match(out.error, /account id/);
+});
+
+test('credentials：zai user_info 是 rawProfile（id 在 user_id）→ 兜底取 user_id 拼 key（issue #6，App 3.17.2）', async () => {
+  const accountId = 'zai-user-77';
+  const entries = fullEntries({ family: 'zai', accountId });
+  entries['oauth:zai:user_info'] = JSON.stringify({ user_id: accountId, name: 'someone', email: 'a@b.c', avatar: 'https://x/y.png' });
+  const file = await writeCredentials(entries);
+  const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
+  assert.equal(out.family, 'zai');
+  assert.equal(out.accountId, accountId);
+  assert.ok(out.plans.individual);
+});
+
+test('credentials：zai user_info 里 id 与 user_id 都缺 → 按 plan key 键名反推账号 id（fork：StreamEmbedder 补丁）', async () => {
+  const entries = fullEntries({ family: 'zai' });
+  entries['oauth:zai:user_info'] = JSON.stringify({ name: 'no-id-at-all' });
+  const file = await writeCredentials(entries);
+  const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
+  // 上游这里报「没有账号 id」；fork 再退一步按键名反推，所以成功
+  assert.deepEqual(Object.keys(out).sort(), ['accountId', 'family', 'plans']);
+  assert.equal(out.family, 'zai');
+  assert.equal(out.accountId, ACCOUNT_ID); // 来自键名，不是 user_info
+  assert.ok(out.plans.individual);
+});
+
+test('credentials：bigmodel user_info 缺 id 时不看 user_id（兜底只给 zai）；有 plan key 就按键名反推（fork）', async () => {
+  const entries = fullEntries();
+  entries['oauth:bigmodel:user_info'] = JSON.stringify({ user_id: 'should-not-count' });
+  const file = await writeCredentials(entries);
+  const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
+  // bigmodel 族不读 user_id（上游规则不变）：id 只可能来自键名
+  assert.equal(out.family, 'bigmodel');
+  assert.equal(out.accountId, ACCOUNT_ID);
+  assert.equal(out.accountId === 'should-not-count', false);
+  assert.ok(out.plans.individual);
+});
+
+test('credentials：bigmodel user_info 只有 user_id、没有 plan key → 不拿 user_id 当 id，报没有账号 id', async () => {
+  const entries = {
+    'oauth:active_provider': 'bigmodel',
+    'oauth:bigmodel:user_info': JSON.stringify({ user_id: 'should-not-count' }),
+  };
+  const file = await writeCredentials(entries);
+  const out = readCodingPlanKeys({ credentialsPath: file, env: { ZCODE_CREDENTIAL_SECRET: SECRET } });
+  assert.ok(out?.error);
+  assert.match(out.error, /account id/);
 });
 
 test('credentials：四个键齐全 → family/accountId/plans 两把 key 都在，别的键不碰', async () => {

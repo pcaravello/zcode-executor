@@ -255,6 +255,17 @@ App 自己也这么用。pickProvider 优先级插入账号型两档（`preferre
 同样读不到。credentials.json 只读、只解四个键，其余键（OAuth 令牌一类）一律不读不解；解出的 key 与
 config.json 的 apiKey 同一待遇（RULES §6、§8）。
 
+2026-11-19 补充（App 3.18 enc:v2，issue #6）：3.18 起凭据改存 `enc:v2:<源>:<sha256(密钥)前24位hex>:<iv>.<tag>.<密文>`。
+`os` 源的密钥是 32 字节随机数存系统钥匙串（service `ZCode Credential Encryption`，account =
+sha256(凭据文件 resolve 后路径) hex），macOS 上本插件用系统 `security` 命令读；Windows/Linux 上 App 走
+@napi-rs/keyring（DPAPI/Secret Service），暂无等价实现，报「不支持」。`env` 源 = sha256(managed secret)，
+managed secret 取 `ZCODE_CREDENTIAL_SECRET` / `ZCODE_CREDENTIAL_SECRET_FILE` / 凭据旁的 `credential-secret`
+（32–4096 字节；显式 `ZCODE_CREDENTIAL_SECRET_FILE` 指的文件照 App 不查权限位）。`credential-source` 钉源文件
+只有 `os\n` 合法，钉了别的值照 App 口径整份拒解。v1 候选表照 App：第一把是解析出的 managed secret
+（env 原样 > SECRET_FILE 文件 > 凭据旁 credential-secret），其后是平台派生；密钥指纹对不上照 App 归
+unavailable（指引重登 App，不是升级插件）。旧实现把认不得的 `enc:` 值当明文用，
+会把 v2 密文误报成「oauth:active_provider 不是 zai 或 bigmodel」——现在认不得的 enc: 前缀直接报错。
+
 重开条件：zcode 提供不落盘的账号型 provider 推送方法；或 key 不再放 credentials.json / 不再这么加密。
 
 ## D20 闲时任务：自己取号排队，回合走官方闲时 provider；credentials.json 多读 `zcodejwttoken`
@@ -447,6 +458,13 @@ runner 起来时已经推了表，registry 里的模型清单与 readState 一�
   登记簿格式要改、旧记录也没有这个字段，等现查成为瓶颈再做。
 - D23 留下的：`ApplyPatch` 的路径提取（等真机抓到补丁格式）；硬链接越界；宿主凭据环境变量名单做成可配置（有人因为少了 `GITHUB_TOKEN` 跑不通再说）；
   审批探针改用不比对内容的管道命令（`diff-files` / `diff-index` / `ls-files`）并处理子模块，彻底不让仓库配置借它跑程序。
+- fork：ZCode 4.0.0 登录的账号在 zcode-executor 里建不出 provider（2026-11-25 本机核对，verified.md「Windows 凭据管理器与 ZCode 4.0.0 凭据布局」）。
+  4.0.0 起 credentials.json 不再存账号型的静态 coding plan key，App 用登录 JWT 现场签发短期的 project access token；
+  D19 那条「从 credentials.json 解出平台 key」无 key 可解，`new` 报 provider registry 为空，start plan 也就起不了会话。
+  旧版本登录留下的静态 key、或 `config.json` 里带 apiKey 的 provider 不受影响（未验证）。上游 0.6.5 同样没有覆盖。
+  候选做法：照 start plan（D21）的做法，把会话的 provider 也换成内置的账号型条目——`provider/updateAccountConfig` 同时推
+  `access` 与 `states`，`requestProviderRuntimeHeaders` 答 JWT，由 app-server 自己签发 token（上面「账号 provider 路线」
+  当年缺的 `states` 已在 D21 里补齐）。要花额度的真机验证才能定，未做。
 
 ## D24 Jev 快筛可配代理：`review.jev.proxy`，CONNECT 隧道自实现，不走环境变量代理
 
@@ -478,3 +496,21 @@ proxy-fetch 提升为工作流层共用模块。测试未覆盖 https 目标的�
 为什么：仓库公开在 GitHub，英文读者面更大；CONTEXT.md 的词表本就带英文对照，翻译不动词表。RULES §2 的「面向人的输出写中文」与 §10 的提交信息语言随之修订。
 
 什么情况下重开：要正式做双语/i18n 时（加 locale 文件与加载层，而不是改回中文硬编码）；发现中文触发词在英文 skill 描述里触发不了时，把触发词表扩成中英双份。
+
+## F-1 fork 同步上游的做法（pcaravello/zcode-executor）
+
+定了什么（2026-11-25）：本 fork 相对上游（KyoMio/zcode-executor）只保留三类差异——面向人的输出写英文（D26）、`lib/credentials.mjs` 里的两处补丁（user_info 没有 id 时按 plan key 键名反推账号 id，commit 1ab62bb；Windows 上读 os 源密钥，F-2）。同步上游用合并（merge 上游的版本 tag），不 rebase、不 cherry-pick：`git merge-tree` 先预演冲突，在集成分支上合并并解冲突，开 PR 等 CI 跑绿，再快进 `translate-messages-en`，不强推。冲突的解法固定为「取上游的逻辑，保留本 fork 的英文文案与补丁」；上游新增或改动的中文消息在同一个合并提交里翻成英文（RULES §10：每个提交都能独立跑过 `npm test`）。fork 自己的决定用 F- 前缀编号，不与上游今后的 D 编号相撞（D26 起名于同步之前，保持不动）。
+
+为什么：fork 要长期跟着上游走。rebase 会重写已推送的历史；cherry-pick 让 git 认不出上游的提交，每次同步都要把同样的冲突重新解一遍；合并保留了上游的祖先关系，下次同步只处理上游新增的改动。
+
+什么情况下重开：上游改成英文输出或正式做双语时，翻译这一类差异消失；fork 的补丁被上游采纳后，只留上游的版本。
+
+## F-2 Windows 上读 enc:v2 的 os 源密钥（pcaravello/zcode-executor）
+
+定了什么（2026-11-25）：`lib/credentials.mjs` 的 `readOsKeySync` 加一条 win32 分支——起系统自带的 powershell.exe（System32 绝对路径，不走 PATH），P/Invoke advapi32 的 `CredReadW`，按 `<sha256(resolve 后的凭据文件路径)>.ZCode Credential Encryption` 读 App（`@napi-rs/keyring`）写的那一个通用凭据；blob 是密钥 base64url 串的 UTF-16LE。不加依赖。密钥只经管道进内存，不落盘、不进日志。按进程缓存（每进程只起一次 powershell），指纹对不上时丢缓存重读一次，仍对不上才报「密钥指纹对不上」。macOS 的读法与上游逐字相同，Linux 仍报「不支持」。
+
+为什么：上游 0.6.3 起支持 `enc:v2`，但 os 源只在 macOS 上读。Windows 上 ZCode App 同样把密钥放进系统凭据存储，读不到就解不开 credentials.json，start plan 要的 `zcodejwttoken` 也拿不到。start plan 的鉴权只靠 JWT（`readStartPlanAuth`），这条分支让它在 Windows 上可用。
+
+代价与边界：每进程多起一个子进程（本机实测约 0.45 秒，含 Add-Type 编译）；依赖 Windows PowerShell 的 Add-Type，执行策略或语言模式限制了它时报「存储不可用」。`npm test` 不碰真机：分支逻辑用 `osKeyReader` 注入覆盖（7 条用例），真实的那次 PowerShell 调用没有自动化测试，靠本机零 token 核对（verified.md「Windows 凭据管理器与 ZCode 4.0.0 凭据布局」）。
+
+什么情况下重开：Node 提供免依赖的 FFI，或 App 换了存储位置或命名；需要 Linux 时另加 `secret-tool` 分支，要在部署机上核对。
