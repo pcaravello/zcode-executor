@@ -169,7 +169,7 @@ zcode-executor cancel <id>                                # stop: deny any pendi
 ## Off-peak sends and start-plan sends
 
 Before using off-peak (`--offpeak`) or Start Plan (`--start-plan`) quota, read `references/offpeak-and-start-plan.md`:
-when to mention off-peak, the `quota` talking points, the full commands for taking tickets / queueing / resuming, the exit-code-2 ticket-refusal table, and the cron health check are all there.
+when to mention off-peak, the `quota` talking points, the commands for taking tickets / queueing / resuming, the exit-code-2 ticket-refusal table, the cron health check, and Start Plan sessions (ZCode 4.0.0 logins) are all there.
 
 ## Two session ids
 

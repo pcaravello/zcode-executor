@@ -148,15 +148,19 @@ const OFFPEAK_PROVIDER_RE = /^account:[^:]+-offpeak-idle-plan$/;
 // start plan 的条目（decisions D21，2026-09-29 对照真机内置文件）：回合模型走它时宿主必须答
 // requestProviderRuntimeHeaders（CLI 只给 off-peak mode 用 send 参数里的 requestAuth）
 const START_PLAN_PROVIDER_RE = /^account:[^:]+-start-plan$/;
+const REVIEW_WORKSPACE_RE = /[\\/]zcode-executor-review-[^\\/]+[\\/]workspace$/;
 const OFFPEAK_FAKE_TICKET = '1000000000000000000';
 const builtinOffPeak = { revision: undefined, providerIds: new Set() };
-const builtinStartPlan = { providerIds: new Set() };
+const builtinStartPlan = { providerIds: new Set(), models: new Map() };
 try {
   const builtin = JSON.parse(readFileSync(builtinFile, 'utf8'));
   builtinOffPeak.revision = builtin?.revision;
   for (const rule of builtin?.config?.providerConfigRules?.providerRules ?? []) {
     if (OFFPEAK_PROVIDER_RE.test(rule?.providerId ?? '')) builtinOffPeak.providerIds.add(rule.providerId);
-    if (START_PLAN_PROVIDER_RE.test(rule?.providerId ?? '')) builtinStartPlan.providerIds.add(rule.providerId);
+    if (START_PLAN_PROVIDER_RE.test(rule?.providerId ?? '')) {
+      builtinStartPlan.providerIds.add(rule.providerId);
+      builtinStartPlan.models.set(rule.providerId, rule.config?.builtinModelIds ?? []);
+    }
   }
 } catch {
   // 内置文件内容坏了：闲时条目一个都没有，闲时回合全按 provider_not_found 走
@@ -309,24 +313,29 @@ const HEADERS_NOT_APPLIED = 'Provider runtime headers were not applied before mo
 function availableModels() {
   if (script.models) return script.models;
   const out = [];
+  const push = (providerId, modelId) => out.push({
+    ref: { providerId, modelId },
+    label: modelId,
+    providerLabel: providerId,
+    contextWindow: 1_000_000,
+    maxOutputTokens: 128_000,
+    reasoning: {
+      levels: [
+        { value: 'low', label: 'low' },
+        { value: 'high', label: 'high' },
+        { value: 'max', label: 'max' },
+      ],
+      defaultLevel: 'max',
+    },
+  });
   for (const p of personalProviders) {
-    for (const modelId of p.modelIds) {
-      out.push({
-        ref: { providerId: p.providerId, modelId },
-        label: modelId,
-        providerLabel: p.providerId,
-        contextWindow: 1_000_000,
-        maxOutputTokens: 128_000,
-        reasoning: {
-          levels: [
-            { value: 'low', label: 'low' },
-            { value: 'high', label: 'high' },
-            { value: 'max', label: 'max' },
-          ],
-          defaultLevel: 'max',
-        },
-      });
-    }
+    for (const modelId of p.modelIds) push(p.providerId, modelId);
+  }
+  // fork（F-3）：推过授权的 start plan 条目也算进表——建在这种条目上的会话，个人文件是空的，
+  // 真机 4.0.0 的 settings.model.available 只列该条目的模型（2026-11-27，verified.md）
+  for (const providerId of builtinStartPlan.providerIds) {
+    if (!state.entitledAccount.has(providerId)) continue;
+    for (const modelId of builtinStartPlan.models.get(providerId) ?? []) push(providerId, modelId);
   }
   return out;
 }
@@ -422,12 +431,40 @@ const pushEvent = (sessionId, type, payload) => {
   send({ method: 'session/event', params: { sessionId, seq: state.seq, type, payload: payload ?? {} } });
 };
 
+// fork（F-3）：审查回合——插件为模型审批在另一条连接里建的会话（工作区 zcode-executor-review-*/workspace）。
+// 真机 4.0.0 上它就是一个普通回合，由模型回复审查结论（2026-11-27）；这里不复刻模型：按剧本 reviewReplies
+// 依序回文本（缺省 'Y'，即快筛放行），从不发审批请求与提问——审查只该回答。
+let reviewCount = 0;
+async function runReviewTurn(sessionId) {
+  const ev = (type, payload) => pushEvent(sessionId, type, payload);
+  // 审查回合也是 start plan 回合：模型请求前先来要运行时头，宿主不答 JWT 就跑不动（真机 2026-11-27）
+  const model = state.sessions.find((s) => s.sessionId === sessionId)?.model;
+  const headersError = await requestRuntimeHeaders({
+    sessionId,
+    modelSelection: model,
+    force: true,
+    accountAccess: { type: 'zhipu-account', accountType: String(model?.providerId).startsWith('account:zai-') ? 'zai' : 'bigmodel', mode: 'start-plan', entitled: true },
+  });
+  if (headersError !== null) {
+    ev('turn.failed', { error: { message: headersError } });
+    return;
+  }
+  const reply = script.reviewReplies?.[reviewCount] ?? 'Y';
+  reviewCount += 1;
+  ev('turn.started', {});
+  ev('model.streaming', { kind: 'text_delta', delta: reply, assistantMessageId: `review_${reviewCount}` });
+  ev('turn.completed', { resultType: 'success', usage: { totalTokens: 0 } });
+  log(`review turn ${reviewCount}: replied ${JSON.stringify(reply)}`);
+}
+
 // 本回合里排队的插话（v4/command sendText 被接受、delivery:queue 的那些）：回合结束前逐条 drain
 // （2026-09-21 对照 ZCode 源码：steerDrained 在回合收尾处推）。回合启动时清空——上一回合
 // hang / fail 没走正常收尾的残留不该排进下一回合（权宜：mock 单会话假设，与 activeTurn 同）
 const pendingSteers = [];
 
 async function runTurn(sessionId, sendParams) {
+  // fork（F-3）：审查会话里的回合走单独一支，不占剧本的 turns
+  if (state.sessions.find((s) => s.sessionId === sessionId)?.review) return runReviewTurn(sessionId);
   const turn = script.turns?.[state.sendCount] ?? {};
   state.sendCount += 1;
   state.stopRequested = false; // 新回合重置：上一回合的叫停不波及这一回合
@@ -461,6 +498,12 @@ async function runTurn(sessionId, sendParams) {
   // 退到表里第一个（权宜：resume 不校验会话存在）
   const model = sendParams?.modelSelection ?? state.sessions.find((s) => s.sessionId === sessionId)?.model ?? availableModels()[0]?.ref
     ?? { providerId: 'zcode-unconfigured', modelId: 'missing-model' };
+  // fork（F-3）：建在 start plan 条目上的会话，普通投递的回合也在这个条目上——没推过授权（或条目不在）照样
+  // provider_not_found（ZCode 4.0.0 真机 2026-11-27：create 之前不推授权，会话根本建不起来）
+  if (START_PLAN_PROVIDER_RE.test(model?.providerId ?? '') && (!builtinStartPlan.providerIds.has(model.providerId) || !state.entitledAccount.has(model.providerId))) {
+    ev('turn.failed', { error: { code: 'provider_not_found', message: `Provider Registry 中不存在 Provider: ${model.providerId}` }, turnPhase: 'model_creation' });
+    return;
+  }
   // 鉴权来源按 provider 分道（zcode.cjs 模型请求装配处，2026-09-29 对照）：start plan（zhipu-account、
   // 非 off-peak）每次模型请求前来反向请求要运行时头；off-peak 用 send 参数里的 requestAuth，不来这个请求；
   // api-key 型不来（真机探针 2026-09-18），只有剧本开 runtimeHeaders 才发
@@ -681,6 +724,8 @@ function handleRequest(msg) {
         updatedAt: now,
         workspace: params.workspace,
       };
+      // fork（F-3）：插件为模型审批另起的那条审查会话，工作区是临时目录 zcode-executor-review-*/workspace
+      if (REVIEW_WORKSPACE_RE.test(String(params.workspace?.workspacePath ?? ''))) session.review = true;
       state.sessions.push(session);
       if (params.persistence === 'deferred') state.deferredIds.add(sessionId);
       if (script.sessionCreateResult) {
