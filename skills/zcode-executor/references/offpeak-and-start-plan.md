@@ -80,3 +80,18 @@ and `--steer` cannot steer into a start-plan send (it is a new send). (It was un
 
 - The model list follows the ZCode App's builtin configuration (a refusal exits 2 and the error lists the list); if the session's model is not on it, create a new session with a different `--tier`.
 - One session may mix both: some sends with `--start-plan`, some without; they do not interfere, and a failed start-plan send does not affect later normal sends.
+
+### Start Plan sessions (ZCode 4.0.0 and later)
+
+ZCode 4.0.0 changed how an account login is stored: `credentials.json` no longer holds a Coding Plan key, so on such a login the plugin has no API key to build a session on. When that happens it falls back to the builtin **Start Plan entry**, and `new` says so on stderr:
+
+```
+new: warning: no API-key provider is available for this ZCode login, so sessions fall back to the Start Plan provider account:<family>-start-plan; every send of such a session uses Start Plan quota
+new: this session runs on the Start Plan provider account:<family>-start-plan: every send uses Start Plan quota
+new: permission requests are reviewed by extra ZCode turns on Start Plan (about 34,000 input tokens and 7 seconds each)
+```
+
+- Such a session runs on Start Plan for **every** send; `--start-plan` is accepted but changes nothing. If the user wants Coding Plan quota instead, they need a login or `config.json` provider that still has an API key.
+- Models are the Start Plan list only (`GLM-5.4`, `GLM-5.3-Flash`, `GLM-5.2`, `GLM-5-Turbo` on 4.0.0); `new` picks the fast tier, `GLM-5.3-Flash`.
+- Permission requests are still gated. Hard rules stop as before; the model review runs as short turns in a second ZCode session, because Z.ai refuses the old review call on Start Plan. Each review costs about 34,000 input tokens of Start Plan quota and about 7 seconds, so a task with many tool calls is slower and more expensive to review than on a Coding Plan key. With `review.enabled:false` nothing is reviewed and every request goes to the human.
+- Off-peak sends (`--offpeak`) need a Coding Plan key and are refused (exit 2) on such a login.

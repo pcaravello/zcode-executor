@@ -16,6 +16,7 @@ import {
   buildPersonalProviderConfig,
   writePersonalProviderFile,
   buildModelSelection,
+  buildStartPlanAccountProvider,
 } from '../lib/providers.mjs';
 import { BUILTIN_PROVIDER_FIXTURE, CREDENTIAL_TEST_SECRET, encryptForTest } from './helpers.mjs';
 
@@ -529,4 +530,76 @@ test('readProviderRegistry：注入 env 里没有的变量绝不从 process.env 
     if (savedBuiltin === undefined) delete process.env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE;
     else process.env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE = savedBuiltin;
   }
+});
+
+// ---------- fork（decisions F-3）：一把 API key 都没有时退到 start plan 条目 ----------
+
+const START_PLAN_JWT = 'start-plan-session-jwt.header.signature';
+
+/** 给 writeAccountFixture 的凭据文件补一把 JWT（start plan 的登录）。 */
+async function withJwt(fx, jwt = START_PLAN_JWT) {
+  const entries = JSON.parse(readFileSync(fx.credentialsPath, 'utf8'));
+  entries.zcodejwttoken = encryptForTest(jwt);
+  await writeFile(fx.credentialsPath, JSON.stringify(entries));
+}
+
+test('buildStartPlanAccountProvider：按内置文件拼出 start plan 条目的 provider，没有 apiKey，带 startPlanAccount 标记', () => {
+  const p = buildStartPlanAccountProvider(BUILTIN_PROVIDER_FIXTURE, 'bigmodel');
+  assert.equal(p.providerId, 'account:bigmodel-start-plan');
+  assert.equal(p.apiKey, undefined);
+  assert.deepEqual(p.startPlanAccount, { family: 'bigmodel' });
+  assert.equal(p.baseURL, 'https://zcode.z.ai/api/v1/zcode-plan/anthropic');
+  assert.deepEqual(p.models.map((m) => m.modelId), ['GLM-5.3-Flash', 'GLM-5.2', 'GLM-5-Turbo']);
+  assert.equal(p.models[0].reasoning.levels.map((l) => l.value).join(','), 'low,high,max');
+  // 条目不在、模型表为空、族不认得 → null
+  assert.equal(buildStartPlanAccountProvider(BUILTIN_PROVIDER_FIXTURE, 'unknown'), null);
+  const stripped = structuredClone(BUILTIN_PROVIDER_FIXTURE);
+  stripped.config.providerConfigRules.providerRules = stripped.config.providerConfigRules.providerRules.filter((r) => r.providerId !== 'account:bigmodel-start-plan');
+  assert.equal(buildStartPlanAccountProvider(stripped, 'bigmodel'), null);
+  const empty = structuredClone(BUILTIN_PROVIDER_FIXTURE);
+  empty.config.providerConfigRules.providerRules.find((r) => r.providerId === 'account:bigmodel-start-plan').config.builtinModelIds = [];
+  assert.equal(buildStartPlanAccountProvider(empty, 'bigmodel'), null);
+});
+
+test('buildPersonalProviderConfig / buildModelSelection：start plan 条目的 provider → 个人文件是空表，model 直接选条目自己', () => {
+  const p = buildStartPlanAccountProvider(BUILTIN_PROVIDER_FIXTURE, 'bigmodel');
+  const personal = buildPersonalProviderConfig(p);
+  assert.deepEqual(personal.config.providerConfigRules.providerRules, []); // 没有 key 可写
+  assert.deepEqual(buildModelSelection(p, 'GLM-5.3-Flash', 'low'), { providerId: 'account:bigmodel-start-plan', modelId: 'GLM-5.3-Flash', options: { reasoningLevel: 'low' } });
+});
+
+test('readProviderRegistry：登录只有 JWT（ZCode 4.0.0 的账号型登录）、config.json 不存在 → 退到 start plan 条目，sources.startPlan 分开报', async () => {
+  const fx = await writeAccountFixture({ plans: {} });
+  await withJwt(fx);
+  const registry = readProviderRegistry(fx.legacyPath, fx.options);
+  assert.deepEqual(registry.providers.map((p) => p.providerId), ['account:bigmodel-start-plan']);
+  assert.deepEqual(registry.sources.startPlan, { ok: true, providerId: 'account:bigmodel-start-plan', error: null });
+  assert.ok(registry.warnings.some((w) => /fall back to the Start Plan provider account:bigmodel-start-plan/.test(w)), registry.warnings.join('; '));
+  assert.equal(registry.builtinPath, fx.builtinPath);
+});
+
+test('readProviderRegistry：有 coding plan key 时不加 start plan 条目（有 key 的机器行为不变）', async () => {
+  const fx = await writeAccountFixture({ plans: { individual: 'sk-ind' } });
+  await withJwt(fx);
+  const registry = readProviderRegistry(fx.legacyPath, fx.options);
+  assert.deepEqual(registry.providers.map((p) => p.providerId), ['account:bigmodel-individual-coding-plan']);
+  assert.equal(registry.sources.startPlan.ok, false);
+});
+
+test('readProviderRegistry：既没有 key 也没有 JWT → 仍然 ExecutorError(1)，原因带上 start plan 这一路查到了什么', async () => {
+  const fx = await writeAccountFixture({ plans: {} });
+  assert.throws(() => readProviderRegistry(fx.legacyPath, fx.options), (err) => {
+    assert.ok(err instanceof ExecutorError);
+    assert.match(err.message, /start plan \(start plan login unavailable/);
+    assert.match(err.details.sources.startPlan.error, /zcodejwttoken/);
+    return true;
+  });
+});
+
+test('readProviderRegistry：JWT 在但内置文件没有该族的 start plan 条目 → ExecutorError(1)，原因说条目不在', async () => {
+  const builtin = structuredClone(BUILTIN_PROVIDER_FIXTURE);
+  builtin.config.providerConfigRules.providerRules = builtin.config.providerConfigRules.providerRules.filter((r) => r.providerId !== 'account:bigmodel-start-plan');
+  const fx = await writeAccountFixture({ plans: {}, builtin });
+  await withJwt(fx);
+  assert.throws(() => readProviderRegistry(fx.legacyPath, fx.options), /no start-plan entry with models for account family bigmodel/);
 });

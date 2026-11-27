@@ -307,6 +307,39 @@ fork（pcaravello/zcode-executor）的真机记录，对应 decisions F-2。只�
   `~/.zcode/v2/runtime/provider/windows-x86_64/4.0.0/endpoint-<hash>/zcode-builtin.json`，里面有
   `account:zai-individual-coding-plan`、`account:zai-team-coding-plan`、`account:zai-start-plan` 等条目。
 
+## Start Plan 会话与审查回合真机（fork，2026-11-27，App 4.0.0 / runtime 0.18.0，Windows 10）
+
+decisions F-3 的真机核对。三次零 token（create/close、resume、list、app-server 生命周期）加几次小额度的真回合
+（单回合 3.4–3.5 万输入 token、几十输出 token，GLM-5.3-Flash，思考等级 high 或 low）。打印只到形状与有无，没有打印任何密钥或解出来的值。
+
+- **会话可以直接建在内置 start plan 条目上**：推 `provider/updateAccountConfig`（授权 `account:zai-start-plan`）后，
+  `session/create` 带 `model:{providerId:"account:zai-start-plan", modelId, options:{reasoningLevel}}` 成功，
+  `settings.model.available` 只列该条目的四个模型；个人 provider 文件是空表也行。
+- **回合**：普通 send（不带 modelSelection）与带 `modelExecution:{selectionScope:"execution", memoryExtraction:"skip"}`
+  的 start plan send 都 done（约 9 秒 / 约 4 秒，resume 后第二次 4 秒、cacheRead 3.5 万）。
+  **每个回合前都来反向请求 `interaction/requestProviderRuntimeHeaders`（providerId=条目，reason=model-request）**，
+  宿主按 D21 答 `{headersApplied:true, requestAuth:{apiKey:<JWT>}}` 即可——普通投递也要答，不只是 `--start-plan`。
+- **resume**：跑过回合的会话在新 app-server 进程里 `session/resume` 成功（同一 workspace）。换 workspace 报
+  `project.session-lineage-invalid`（对照 v4.0.0 源码 `server-operations.ts` 的
+  `validateSessionActivationWorkspace`：workspace 逐字段比对）；本插件会话总在登记簿的 cwd 里，碰不到。
+  没跑过回合的会话不落盘，list 不到、resume 报同一错误——与 2026-09-08 的「没跑过回合 resume 不了」一致。
+- **审查回合**：闸门的快筛与慢判提示词作为回合发进第二条连接（另起 app-server、临时工作区、同条目同模型、
+  思考等级 low）都成功：快筛回 `Y`（7.7 秒）；慢判对 `git push --force` 回
+  `Conclusion: deny git-force-push …`（7.1 秒，解析出 ruleId）。两次回合都没发审批请求与提问。
+  每个审查回合同样来要运行时头。
+- **generateText 不可用**：`workspace/generateText` 带 start plan 的 JWT 被服务端拒
+  「This client is not supported. Please use the official ZCode client.」（1.7 秒；reason=model-request 的
+  反向请求来过、答了 JWT 仍拒）；换成 coding plan 条目则回「Model request failed.」（1 秒）。
+  `ZCODE_APP_VERSION=4.0.0` 不改变结果。ZCode 源码对照（v4.0.0）：`model-execution.ts` 的
+  `applyModelRequestAuth` 会剥掉请求里的来源校验头——客户端给凭据的请求与官方客户端的请求从此不同源。
+  不绕它（F-3）。
+- **app-server 生命周期**：关掉最后一条会话后进程并不退出（关 A → 2.5 秒后仍能 create B；B 开着时 create/close C
+  也正常），审查连接可以复用。mock 曾在关掉唯一会话后退出，是 mock 的形状不是真机行为。
+- **端到端（本插件 CLI）**：`new`（stderr 报额度与审批两句）→ `send --wait`（Write 一文件，快筛放行，done 29 秒）→
+  第二次 `send --wait`（新 runner：授权+resume+快筛，done 23 秒）→ `send --start-plan --wait`（done 23 秒）→
+  一单两个 Write（两次快筛，done 39 秒）。文件内容全部正确，`events.jsonl` 的 gate 事件
+  `stage:"review-fast", reviewer:"zcode"`，JWT 不在 runs/ 任何文件里。
+
 ## 凭据文件探针（2026-09-21，App 3.12.2，scripts/probe-credentials.mjs，零 token）
 
 T6-C 的背景事实，用户本机跑探针核实；加密与键名细节从 ZCode 开源源码 3.14.0 读出、本机文件格式核对：

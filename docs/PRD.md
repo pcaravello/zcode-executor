@@ -119,6 +119,14 @@ Claude Code 负责想清楚一件开发任务，本机 ZCode（GLM）负责把�
 - **机制**：runner 推 `provider/updateAccountConfig` 授权内置条目后 send，回合的鉴权由宿主应答反向请求 `interaction/requestProviderRuntimeHeaders` 给出（材料是 `zcodejwttoken`，App 宿主同款）。`modelSelection` 只在本回合生效，不改会话的当前模型。
 - **显示**：不带 `--wait` 时人读 `send: queued, runner pid … (this turn bills Start Plan quota, account:<family>-start-plan)`；`--json` 加 `startPlan: {providerId}`。事件 `executor.startplan.started` 留痕。
 
+#### fork：Start Plan 会话（ZCode 4.0.0 起，decisions F-3）
+
+- **为什么**：ZCode 4.0.0 起账号型登录不再往 `credentials.json` 存静态的 coding plan key，本工具按 D19 解不出 key，`new` 报 provider 表是空的。
+- **是什么**：一把 API key 都没有（账号型没有 key、`config.json` 也没有可用 provider）、而凭据里解得出 `zcodejwttoken` 时，provider 表退到内置的 start plan 条目 `account:<family>-start-plan`。`new` 把会话直接建在这个条目上（不是建在 key 上再逐回合改道），stderr 说两句：每条投递都走 Start Plan 额度、审批由额外的 ZCode 回合审查。有 key 的机器行为不变。
+- **会话**：模型只认该条目的 `builtinModelIds`（4.0.0：GLM-5.4、GLM-5.3-Flash、GLM-5.2、GLM-5-Turbo）；个人 provider 文件写空表；runner 在 create / resume 之前推 `provider/updateAccountConfig`；每个回合（包括不带 `--start-plan` 的普通投递）ZCode 都来要运行时头，宿主答 JWT。`--start-plan` 照常可用，效果相同。
+- **审批**：红线不变。模型审批不能走 `workspace/generateText`（ZCode 4.0.0 的 start plan 端点对宿主给 JWT 的这条调用回「This client is not supported」），改为在第二条 app-server 连接里建审查会话，每次审查发一个回合、取最终回复；提示词、解析、闸门编排都不变。代价：每次审查约 3.4 万输入 token 的 Start Plan 额度、约 7 秒。`review.enabled:false` 时不审查，除红线外一律转人工。
+- **限制**：这类登录上 `--offpeak` 被拒（闲时投递要 coding plan key，退出码 2）；`doctor` 的 `sources.startPlan` 报这一路的状态，握手也建在 start plan 条目上。
+
 ## 5. 模型等级与思考等级
 
 - **两个等级**：`fast`（Flash、lite、mini、air 这类）和 `strong`（旗舰）。
