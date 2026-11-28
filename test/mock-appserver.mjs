@@ -38,6 +38,7 @@
 //   exitAfter:         方法名                              处理完这个方法就 process.exit(3)
 //   junkStdoutLine:    "…"                                 应答第一个请求前往 stdout 打一行非 JSON
 //   reportEnv:         [变量名]                            启动时对每个名字往 stderr 打一行 `env <名字>=set|unset`
+//   reportEnvValues:   [变量名]                            fork F-4：打 `envvalue <名字>=<值>`，只给不含秘密的变量
 //                                                          （只报有没有，不报值）：测客户端没把宿主代理的凭据带给子进程
 //   hangMethods:       [方法名]                            这些方法收到后不应答（测请求超时）
 //   ignoreEof:         true                                stdin EOF 不退出（测 close 的 SIGKILL 路径）
@@ -972,6 +973,8 @@ if (script.serverRequests?.length) {
 
 log(`started version=${version} pid=${process.pid}`);
 for (const name of script.reportEnv ?? []) log(`env ${name}=${process.env[name] === undefined ? 'unset' : 'set'}`);
+// fork F-4：只给不含秘密的变量用（ZCODE_APP_VERSION）——打的是值本身
+for (const name of script.reportEnvValues ?? []) log(`envvalue ${name}=${process.env[name] ?? '(unset)'}`);
 
 const rl = createInterface({ input: process.stdin });
 rl.on('line', (line) => {

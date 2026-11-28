@@ -524,3 +524,13 @@ proxy-fetch 提升为工作流层共用模块。测试未覆盖 https 目标的�
 代价与边界：每次审查约 3.4 万输入 token 的 Start Plan 额度、约 7 秒（GLM-5.3-Flash、思考等级 low，真机 2026-11-27），比 generateText 贵两个数量级——审批多的任务又慢又费；`--offpeak` 在这类登录上被拒（要 coding plan key）；Linux 的 os 源密钥仍读不了（F-2）。
 
 什么情况下重开：上游支持 4.0.0 的凭据布局（或 generateText 恢复可用）时，回落与审查回合都可以拆掉；Z.ai 对第三方开放 start plan 的凭据应答时，审查换回 generateText。
+
+## F-4 拉 app-server 时给 ZCODE_APP_VERSION（pcaravello/zcode-executor）
+
+定了什么（2026-11-28）：`AppServerClient.spawn` 在调用方与环境都没给 `ZCODE_APP_VERSION` 时，从 zcode.cjs 的位置推已安装的 App 版本并设上（`lib/app-version.mjs`）：macOS 读 `<App>.app/Contents/Info.plist` 的 `CFBundleShortVersionString`，Linux / Windows 读 `<App>/resources/app.asar` 里 `package.json` 的 `version`（只解 asar 的 pickle 头与那一个条目，不解包）。推不出来就不设，行为同以前。闲时自检的 App 版本提示也改用同一个函数（以前只认 macOS，Linux 上一直是 unknown）。
+
+为什么：ZCode 4.0.0（runtime 0.18.0）起，start plan 的模型请求要带 App 版本——App 拉 app-server 时设这个变量，运行时据此加 `X-ZCode-App-Version` 等请求头。本插件拉 app-server 时没有它：WSL2 真机（App 4.0.0，有个人 coding plan key 的登录）上 `--start-plan` 投递每次都以 `turn.failed` / `empty_model_response` 收场（`zcode.z.ai/api/v1/zcode-plan/anthropic` 第一次 server_error、重试后空响应），宿主答运行时头答的是正确的 `zcodejwttoken`（与 App 的 `loadStartPlanZcodeJwt` 同一个键）。同一会话、同一 JWT，只加 `ZCODE_APP_VERSION=4.0.0` 就 done；改完后不手设变量也 done。同一改动让闲时自检从 changed 回到 ok。
+
+代价与边界：版本号来自本机安装的 App，不是写死的；ZCODE_BIN 指向别处（独立 CLI）时推不出来，那条路照旧不设。
+
+什么情况下重开：App 改了目录布局或不再用 asar；运行时不再需要这个变量。
