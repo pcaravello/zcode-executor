@@ -166,6 +166,7 @@ Jev 快筛：
 - 白名单：cwd 解析成绝对路径后必须在某个 `allowedRoots` 之下（前缀比对补分隔符）。不在则退出码 2。
   cwd 不是 worktree（`git rev-parse --git-dir` 与 `--git-common-dir` 相同）只在 stderr 警告。
 - runner 起来先 `session/resume`；登记簿没有 sessionId 或 resume 报 Session not found 就 `session/create`（`model`、thoughtLevel、toolDenylist 从登记簿取；3.12 前这里传的是 `runtimeModel`，见 decisions D14）并写回 sessionId（重建时记事件 `executor.recreated`）。
+- fork（decisions F-3）：登记簿的 provider 是内置的 start plan 条目（`startPlanAccount` 标记）时，create / resume 之前先推 `provider/updateAccountConfig`（授权该条目，ZCode 4.0.0 上不推会话建不起来）；模型审批不接执行端连接，改在第二条 app-server 连接里建审查会话，每次审查发一个回合（`lib/startplan-review.mjs`），审查会话里的审批请求一律拒、提问一律拒答，事件与临时目录随连接收场清掉。
 - runner：一条会话一个进程，没有 daemon，**一律后台**（detached，日志写 `runs/<id>/runner.log`）：挂起时连接要由 runner 保持不答，
   前台进程以 5 退出后不能带走连接。`send` 只入队并在没有活 runner 时起一个；`--wait` 只是跟看文件。审批与提问的应答经 `runs/<id>/answer.json` 交给 runner。
   一生：拿 O_EXCL 锁（已有锁就读 pid，活着拒绝、死了覆盖）→ 拿到锁之后才清陈年的 pending / answer，以及早于本 runner 启动的 stop / cancel（晚于启动的是给本 runner 的命令，不能吞）
@@ -220,6 +221,7 @@ Jev 快筛：
 - 闸门里任何异常（红线判定抛错、证据收集失败、落盘失败）都转人工（stage gate-error），不会变成给 zcode 的错误应答。
 - soft 规则原样搬，清除条件是任务单同时点到动作和对象。
 - ZCode 快筛和慢判共用 `selection`：取 `fast` 档模型，`options.reasoningLevel` 取配置 `review.thought`（默认 `low`；模型没有那档就不传；3.12 前参数叫 `modelRef`、字段叫 `variant`，见 decisions D14）。配置 Jev key 后仅 Jev pass 才提前跳过全部 ZCode 审批；其他情况原快筛和慢判仍用这条 selection。
+- fork（decisions F-3）：会话建在内置 start plan 条目上时（ZCode 4.0.0 的账号型登录没有 key），`workspace/generateText` 不可用（服务端拒），快筛与慢判的 Complete 换成「第二条连接里的审查回合」（`lib/startplan-review.mjs`）：同一个 start plan 条目、`review.thought` 档，system 与 user 并成一条消息发出，取回合的最终回复按原样解析；一次审查约 3.4 万输入 token 的 Start Plan 额度、约 7 秒。
 - 放行 → 应答 `{decision:"allow"}`（形状见 verified.md「审批」），但**前提是 options 里存在 `kind` 为 `allow_once` 的项**，没有就视为 ask；
   拒绝 → `{decision:"deny", reason}`。真机的拒绝项 kind 是 `deny`，deny 类判断同时认 `deny` 和 `deny_once`。options 每项自带 `response`，以后可直接回它。
 - 挂起：写 `pending.json`（0600；落盘前按值抹掉 runner 手里的密钥，只抹确切的值），连接保持不答，state.phase 置 `pending`。形状：

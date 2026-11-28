@@ -514,3 +514,23 @@ proxy-fetch 提升为工作流层共用模块。测试未覆盖 https 目标的�
 代价与边界：每进程多起一个子进程（本机实测约 0.45 秒，含 Add-Type 编译）；依赖 Windows PowerShell 的 Add-Type，执行策略或语言模式限制了它时报「存储不可用」。`npm test` 不碰真机：分支逻辑用 `osKeyReader` 注入覆盖（7 条用例），真实的那次 PowerShell 调用没有自动化测试，靠本机零 token 核对（verified.md「Windows 凭据管理器与 ZCode 4.0.0 凭据布局」）。
 
 什么情况下重开：Node 提供免依赖的 FFI，或 App 换了存储位置或命名；需要 Linux 时另加 `secret-tool` 分支，要在部署机上核对。
+
+## F-3 Start Plan 会话：无 key 的 ZCode 4.0.0 登录也能派活（pcaravello/zcode-executor）
+
+定了什么（2026-11-27）：一把 API key 都没有（账号型登录解不出 coding plan key、`config.json` 也没有可用 provider）、凭据里解得出 `zcodejwttoken` 时，`readProviderRegistry` 的 provider 表退到内置的 start plan 条目 `account:<family>-start-plan`，`new` 把会话直接建在这个条目上；个人 provider 文件写空表，模型选择用条目自己的 providerId。runner 在 create / resume 之前推 `provider/updateAccountConfig`；每个回合（含不带 `--start-plan` 的普通投递）ZCode 都来要运行时头，宿主按条目 providerId 答 JWT。模型审批不走 `workspace/generateText`（start plan 端点对宿主给的 JWT 回「This client is not supported」），`lib/startplan-review.mjs` 把 Complete 换成第二条 app-server 连接里的审查回合：同一 start plan 条目、`review.thought` 档，system 与 user 并成一条消息，取回合最终回复按原解析跑闸门；审查会话里审批一律拒、提问一律拒答，事件落临时目录随连接收场删。审查回合复用同一条连接、只关会话不关连接（Session.close 会连客户端一起关，第一次审查后进程就没了——mock 上复现过，真机 4.0.0 关掉最后一条会话进程并不退出）。`doctor` 的 `sources.startPlan` 单独报这一路，握手也建在 start plan 条目上；`new` 在 stderr 说明额度与审批方式。有 key 的机器行为不变。
+
+为什么：ZCode 4.0.0 起账号型登录不再往 `credentials.json` 存静态 coding plan key（App 用登录 JWT 现场签发短期 project token，verified.md「Windows 凭据管理器与 ZCode 4.0.0 凭据布局」），D19 那条路无 key 可解，上游 0.6.5 在这种登录上建不出会话。start plan 的回合鉴权（D21）只靠 JWT 且真机已验通，把它从「逐回合改道」扩成「会话就建在条目上」是改动最小的路。审批走回合是因为审查没有会话、必须向宿主要凭据，而服务端只认官方客户端；回合内 ZCode 运行时用的就是同一把 JWT 且已验通。拒绝伪装官方客户端：那是服务端的限制，绕它不属于本工具的事。
+
+代价与边界：每次审查约 3.4 万输入 token 的 Start Plan 额度、约 7 秒（GLM-5.3-Flash、思考等级 low，真机 2026-11-27），比 generateText 贵两个数量级——审批多的任务又慢又费；`--offpeak` 在这类登录上被拒（要 coding plan key）；Linux 的 os 源密钥仍读不了（F-2）。
+
+什么情况下重开：上游支持 4.0.0 的凭据布局（或 generateText 恢复可用）时，回落与审查回合都可以拆掉；Z.ai 对第三方开放 start plan 的凭据应答时，审查换回 generateText。
+
+## F-4 拉 app-server 时给 ZCODE_APP_VERSION（pcaravello/zcode-executor）
+
+定了什么（2026-11-28）：`AppServerClient.spawn` 在调用方与环境都没给 `ZCODE_APP_VERSION` 时，从 zcode.cjs 的位置推已安装的 App 版本并设上（`lib/app-version.mjs`）：macOS 读 `<App>.app/Contents/Info.plist` 的 `CFBundleShortVersionString`，Linux / Windows 读 `<App>/resources/app.asar` 里 `package.json` 的 `version`（只解 asar 的 pickle 头与那一个条目，不解包）。推不出来就不设，行为同以前。闲时自检的 App 版本提示也改用同一个函数（以前只认 macOS，Linux 上一直是 unknown）。
+
+为什么：ZCode 4.0.0（runtime 0.18.0）起，start plan 的模型请求要带 App 版本——App 拉 app-server 时设这个变量，运行时据此加 `X-ZCode-App-Version` 等请求头。本插件拉 app-server 时没有它：WSL2 真机（App 4.0.0，有个人 coding plan key 的登录）上 `--start-plan` 投递每次都以 `turn.failed` / `empty_model_response` 收场（`zcode.z.ai/api/v1/zcode-plan/anthropic` 第一次 server_error、重试后空响应），宿主答运行时头答的是正确的 `zcodejwttoken`（与 App 的 `loadStartPlanZcodeJwt` 同一个键）。同一会话、同一 JWT，只加 `ZCODE_APP_VERSION=4.0.0` 就 done；改完后不手设变量也 done。同一改动让闲时自检从 changed 回到 ok。
+
+代价与边界：版本号来自本机安装的 App，不是写死的；ZCODE_BIN 指向别处（独立 CLI）时推不出来，那条路照旧不设。
+
+什么情况下重开：App 改了目录布局或不再用 asar；运行时不再需要这个变量。
